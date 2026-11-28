@@ -22,10 +22,11 @@ import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { Tooltip } from "../../ui/tooltip";
 import { IconHash, IconPeople, IconX } from "../icons";
 import { ChannelCallButton } from "./ChannelCallButton";
-import { ChannelComposer } from "./ChannelComposer";
+import { ChannelComposer, type ComposerHandle } from "./ChannelComposer";
 import { ChannelMessageRow } from "./ChannelMessageRow";
 import { ConversationGlyph, ConversationList } from "./ConversationList";
 import { DraftsPage } from "./DraftsPage";
+import { FileDropZone } from "./FileDropZone";
 import { ThreadsPage } from "./ThreadsPage";
 
 type Navigate = (route: Route, opts?: { replace?: boolean }) => void;
@@ -92,6 +93,20 @@ function MessageList({
     stick.current = true;
     previousFirst.current = undefined;
   }, [channelId]);
+  // Images and files load after the messages lay out: keep the bottom in
+  // view while you are there.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    const content = contentRef.current;
+    if (!el || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (stick.current) el.scrollTop = el.scrollHeight;
+      previousHeight.current = el.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div
@@ -102,7 +117,10 @@ function MessageList({
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
       }}
     >
-      <div className="flex min-h-full flex-col justify-end pt-4 pb-2">
+      <div
+        ref={contentRef}
+        className="flex min-h-full flex-col justify-end pt-4 pb-2"
+      >
         {state.hasMore && onOpenThread && (
           <div className="mb-2 flex justify-center">
             <Button
@@ -211,6 +229,7 @@ function ThreadPanel({
 }) {
   const replies = useChannelMessages(channelId, thread);
   const phone = useIsPhone();
+  const composer = useRef<ComposerHandle>(null);
   return (
     <aside
       aria-label="Thread"
@@ -221,67 +240,76 @@ function ThreadPanel({
           : "w-[min(420px,42%)] shrink-0 border-l border-divider",
       )}
     >
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-divider-soft px-5">
-        <div className="min-w-0 flex-1">
-          <span className="text-item-title font-bold text-fg">Thread</span>
-          <span className="ml-2 truncate text-meta text-faint">
-            {channelLabel}
-          </span>
-        </div>
-        {!phone && (
-          <Tooltip label="Close thread">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<IconX size={20} />}
-              aria-label="Close thread"
-              onClick={onClose}
-            />
-          </Tooltip>
-        )}
-      </header>
-      <MessageList
-        state={replies}
-        channelId={`${channelId}:${thread}`}
-        conversationId={channelId}
-        intro={
-          parent && (
-            <div className="mb-1">
-              <ChannelMessageRow
-                channelId={channelId}
-                message={parent}
-                head
-                onReact={
-                  replies.asUser
-                    ? (name, emoji) => onReactParent(parent, name, emoji)
-                    : undefined
-                }
+      <FileDropZone
+        label="Upload to this thread"
+        disabled={!replies.asUser}
+        onFiles={(files) => composer.current?.addFiles(files)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-divider-soft px-5">
+          <div className="min-w-0 flex-1">
+            <span className="text-item-title font-bold text-fg">Thread</span>
+            <span className="ml-2 truncate text-meta text-faint">
+              {channelLabel}
+            </span>
+          </div>
+          {!phone && (
+            <Tooltip label="Close thread">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<IconX size={20} />}
+                aria-label="Close thread"
+                onClick={onClose}
               />
-              {/* Slack's "15 replies" rule between the message and its
+            </Tooltip>
+          )}
+        </header>
+        <MessageList
+          state={replies}
+          channelId={`${channelId}:${thread}`}
+          conversationId={channelId}
+          intro={
+            parent && (
+              <div className="mb-1">
+                <ChannelMessageRow
+                  channelId={channelId}
+                  message={parent}
+                  head
+                  onReact={
+                    replies.asUser
+                      ? (name, emoji) => onReactParent(parent, name, emoji)
+                      : undefined
+                  }
+                />
+                {/* Slack's "15 replies" rule between the message and its
                   thread. */}
-              {!!parent.replyCount && (
-                <div className="flex items-center gap-3 px-5 pt-3 pb-1 text-meta text-dim after:h-px after:flex-1 after:bg-divider">
-                  {parent.replyCount}{" "}
-                  {parent.replyCount === 1 ? "reply" : "replies"}
-                </div>
-              )}
-            </div>
-          )
-        }
-      />
-      <div className="shrink-0 px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))] phone:px-3">
-        <ChannelComposer
-          key={thread}
-          draftOf={{ channelId, thread }}
-          placeholder="Reply"
-          disabled={!replies.asUser}
-          disabledHint={NO_GRANT_HINT}
-          broadcastLabel={`Also send to ${channelLabel}`}
-          onSend={replies.send}
-          onEditLast={() => editLast(replies)}
-          autoFocus={!phone}
+                {!!parent.replyCount && (
+                  <div className="flex items-center gap-3 px-5 pt-3 pb-1 text-meta text-dim after:h-px after:flex-1 after:bg-divider">
+                    {parent.replyCount}{" "}
+                    {parent.replyCount === 1 ? "reply" : "replies"}
+                  </div>
+                )}
+              </div>
+            )
+          }
         />
-      </div>
+        <div className="shrink-0 px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))] phone:px-3">
+          <ChannelComposer
+            key={thread}
+            draftOf={{ channelId, thread }}
+            placeholder="Reply"
+            disabled={!replies.asUser}
+            disabledHint={NO_GRANT_HINT}
+            broadcastLabel={`Also send to ${channelLabel}`}
+            onSend={replies.send}
+            onEditLast={() => editLast(replies)}
+            autoFocus={!phone}
+            acceptFiles
+            ref={composer}
+          />
+        </div>
+      </FileDropZone>
     </aside>
   );
 }
@@ -387,6 +415,7 @@ function ConversationView({
   const phone = useIsPhone();
   const [info, setInfo] = useState<ConversationInfo | null>(null);
   const main = useChannelMessages(channelId);
+  const composer = useRef<ComposerHandle>(null);
 
   useEffect(() => {
     rememberChannel(channelId);
@@ -418,54 +447,67 @@ function ConversationView({
 
   return (
     <div className="relative flex min-h-0 flex-1">
-      <section
-        aria-label={label || "Channel"}
+      <FileDropZone
+        label={label ? `Upload to ${label}` : "Upload"}
+        disabled={!main.asUser}
+        onFiles={(files) => composer.current?.addFiles(files)}
         className="flex min-w-0 flex-1 flex-col"
       >
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-divider-soft px-5">
-          {head && <ConversationGlyph conversation={head} size={22} />}
-          <h1 className="min-w-0 truncate text-dialog-title font-bold text-fg">
-            {head?.name ?? ""}
-          </h1>
-          {info?.topic && (
-            <span className="ml-3 min-w-0 flex-1 truncate text-body text-dim phone:hidden">
-              {info.topic}
-            </span>
-          )}
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {info?.memberCount !== undefined &&
-              (info.kind === "channel" || info.kind === "private") && (
-                <span
-                  className="flex items-center gap-1 px-1.5 text-body text-dim tabular-nums"
-                  aria-label={`${info.memberCount} ${info.memberCount === 1 ? "member" : "members"}`}
-                >
-                  <IconPeople size={20} />
-                  {info.memberCount}
-                </span>
+        <section
+          aria-label={label || "Channel"}
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-divider-soft px-5">
+            {head && <ConversationGlyph conversation={head} size={22} />}
+            <h1 className="min-w-0 truncate text-dialog-title font-bold text-fg">
+              {head?.name ?? ""}
+            </h1>
+            {info?.topic && (
+              <span className="ml-3 min-w-0 flex-1 truncate text-body text-dim phone:hidden">
+                {info.topic}
+              </span>
+            )}
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {info?.memberCount !== undefined &&
+                (info.kind === "channel" || info.kind === "private") && (
+                  <span
+                    className="flex items-center gap-1 px-1.5 text-body text-dim tabular-nums"
+                    aria-label={`${info.memberCount} ${info.memberCount === 1 ? "member" : "members"}`}
+                  >
+                    <IconPeople size={20} />
+                    {info.memberCount}
+                  </span>
+                )}
+              {label && (
+                <ChannelCallButton channelId={channelId} label={label} />
               )}
-            {label && <ChannelCallButton channelId={channelId} label={label} />}
-          </div>
-        </header>
-        <MessageList
-          state={main}
-          channelId={channelId}
-          conversationId={channelId}
-          openThread={thread}
-          onOpenThread={(ts) => openThread(ts)}
-        />
-        <div className="shrink-0 px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))] phone:px-3">
-          <ChannelComposer
-            key={channelId}
-            draftOf={{ channelId }}
-            placeholder={label ? `Message ${label}` : "Message"}
-            disabled={!main.asUser}
-            disabledHint={NO_GRANT_HINT}
-            onSend={(text) => main.send(text)}
-            onEditLast={() => editLast(main)}
-            autoFocus={!phone && !thread}
+            </div>
+          </header>
+          <MessageList
+            state={main}
+            channelId={channelId}
+            conversationId={channelId}
+            openThread={thread}
+            onOpenThread={(ts) => openThread(ts)}
           />
-        </div>
-      </section>
+          <div className="shrink-0 px-5 pt-1 pb-[max(16px,env(safe-area-inset-bottom))] phone:px-3">
+            <ChannelComposer
+              key={channelId}
+              draftOf={{ channelId }}
+              placeholder={label ? `Message ${label}` : "Message"}
+              disabled={!main.asUser}
+              disabledHint={NO_GRANT_HINT}
+              onSend={(text, _broadcast, files) =>
+                main.send(text, false, files)
+              }
+              onEditLast={() => editLast(main)}
+              acceptFiles
+              ref={composer}
+              autoFocus={!phone && !thread}
+            />
+          </div>
+        </section>
+      </FileDropZone>
       {thread && (
         <ThreadPanel
           key={thread}

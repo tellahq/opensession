@@ -95,7 +95,7 @@ function Files({ files }: { files: NonNullable<ChannelMessage["files"]> }) {
               href={file.permalink}
               target="_blank"
               rel="noreferrer"
-              className="block w-fit overflow-hidden rounded-lg border border-line"
+              className="block w-fit max-w-[min(100%,480px)] overflow-hidden rounded-lg border border-line"
             >
               <img
                 src={fileSrc(file.thumb)}
@@ -103,7 +103,7 @@ function Files({ files }: { files: NonNullable<ChannelMessage["files"]> }) {
                 loading="lazy"
                 width={file.width}
                 height={file.height}
-                className="block h-auto max-h-[360px] w-auto max-w-[min(100%,480px)] object-contain"
+                className="block h-auto max-h-[360px] w-auto max-w-full object-contain"
               />
             </a>
           </div>
