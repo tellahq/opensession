@@ -306,7 +306,7 @@ export function BusyInline({
 				    centre on the work fold's chevron, which hangs out by the same
 				    8px from a box that stays centred. */}
         <span className="-ml-2 grid size-5 shrink-0 place-items-center">
-          <PulseDot size={7} />
+          <PulseDot size={9} />
         </span>
         {stoppingSince != null ? (
           <BusyStopping since={stoppingSince} />
