@@ -144,8 +144,9 @@ test("a review without a PR combines and aligns its controls", () => {
     "createPortal(toolbarContents, toolbarTarget)",
   );
   expect(diffPanelSource).toContain(
-    'toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"',
+    'toolbarTarget === undefined ? "pt-2.5" : "pt-0"',
   );
+  expect(diffPanelSource).toContain("flush: toolbarTarget === undefined");
 });
 
 test("sidebar Changes shares Review's code display options", () => {
@@ -198,13 +199,16 @@ test("sidebar Changes shares Review's code display options", () => {
     '"mx-2 overflow-clip rounded-lg border border-[var(--review-file-border)]"',
   );
   expect(commentableDiffSource).toContain(
-    '!stickyFileHeaders && "mt-0 rounded-none"',
+    '(flush || !stickyFileHeaders) && "mt-0 rounded-none"',
   );
   expect(commentableDiffSource).toContain(
     "style={stickyFileHeaders ? undefined : DIFF_SURFACE_STYLE[theme]}",
   );
   expect(commentableDiffSource).toContain(
     'stickyFileHeaders ? "gap-2.5" : "gap-4"',
+  );
+  expect(commentableDiffSource).toContain(
+    "flatSeparators ? FLAT_SEPARATOR_CSS : undefined",
   );
   expect(commentableDiffSource).toContain(
     'stickyFileHeaders ? "gap-[7px]" : "gap-4"',

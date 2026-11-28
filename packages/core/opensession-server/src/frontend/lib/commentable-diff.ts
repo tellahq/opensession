@@ -72,6 +72,11 @@ export interface CommentableDiffOptions {
   /** Keep each filename visible while its expanded file scrolls through a review canvas. */
   stickyFileHeaders?: boolean;
   /**
+   * Run files edge to edge: square full-width rows split by hairlines and flat
+   * "unmodified lines" bands, for a narrow panel that has no room for insets.
+   */
+  flush?: boolean;
+  /**
    * Review-batching mode: when provided, already-added comments render inline as
    * pending cards (the parent owns the list and submits them as one review).
    * Without it the component stays single-shot (e.g. session feedback).

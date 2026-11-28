@@ -87,12 +87,12 @@ export const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
   },
 };
 
-/* Phone "unmodified lines" rows, closer to GitHub's app: one flat full-width
+/* Phone and flush "unmodified lines" rows, closer to GitHub's app: one flat full-width
    band with a single expand icon and small type, instead of a rounded card
    with separate up and down buttons and a gap above and below. Tapping the
    label expands both ways, so the dropped down button loses nothing. Pierre
    applies this in its `unsafe` layer, after its own base styles. */
-export const PHONE_SEPARATOR_CSS = `
+export const FLAT_SEPARATOR_CSS = `
 [data-separator="line-info"] {
   height: 28px;
   margin-block: 0;

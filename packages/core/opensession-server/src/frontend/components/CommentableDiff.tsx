@@ -73,7 +73,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { PhoneDiffCommentComposer } from "./PhoneDiffCommentComposer";
 import {
   DIFF_SURFACE_STYLE,
-  PHONE_SEPARATOR_CSS,
+  FLAT_SEPARATOR_CSS,
   diffAppearanceOptions,
 } from "../lib/commentable-diff-appearance";
 import { ensureDiffLanguages } from "../lib/diff-languages";
@@ -98,6 +98,11 @@ const STICKY_FILE_HEADER =
   "sticky top-[calc(var(--review-file-header-top,0px)-1px)] z-6 bg-surface";
 const STICKY_FILE_HEADER_SURFACE =
   "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
+// Flush files fill the panel's width: a square filename row lined up with the
+// panel's toolbar, its code directly under it, and a hairline between files.
+const FLUSH_FILE_ROW = "border-b border-divider";
+const FLUSH_FILE_HEADER_SURFACE =
+  "rounded-none bg-surface px-3.5 phone:px-3.5 group-data-[stuck]:shadow-[inset_0_-1px_0_var(--divider)]";
 
 /* The phone header's folder part: shrinks first and loses its start, so a
    deep path reads "…/src/" while the filename after it stays whole. */
@@ -269,6 +274,7 @@ export function CommentableDiff({ patch, options }: Props) {
     visibleFileOrder,
     fileActions,
     stickyFileHeaders = false,
+    flush = false,
     viewedFiles,
     changedFiles,
     onToggleViewed,
@@ -710,8 +716,10 @@ export function CommentableDiff({ patch, options }: Props) {
       <div
         className={cn(
           FILE_ROW,
-          !stickyFileHeaders &&
-            "mx-2 overflow-clip rounded-lg border border-[var(--review-file-border)]",
+          flush
+            ? FLUSH_FILE_ROW
+            : !stickyFileHeaders &&
+                "mx-2 overflow-clip rounded-lg border border-[var(--review-file-border)]",
         )}
         key={`${file.name}-${i}`}
         data-diff-file={file.name}
@@ -727,9 +735,11 @@ export function CommentableDiff({ patch, options }: Props) {
             // scroll to and expand a file (`el.querySelector(".diff-file-header")`).
             className={cn(
               FILE_HEADER,
-              stickyFileHeaders
-                ? STICKY_FILE_HEADER_SURFACE
-                : "w-auto rounded-none bg-[var(--review-file-header-bg)] hover:bg-[var(--review-file-header-hover)]",
+              flush
+                ? FLUSH_FILE_HEADER_SURFACE
+                : stickyFileHeaders
+                  ? STICKY_FILE_HEADER_SURFACE
+                  : "w-auto rounded-none bg-[var(--review-file-header-bg)] hover:bg-[var(--review-file-header-hover)]",
               !isEditing && "cursor-pointer",
             )}
             // The whole row toggles the file, not just the chevron and name.
@@ -1041,7 +1051,10 @@ export function CommentableDiff({ patch, options }: Props) {
         </div>
         {(isOpen || resolved.length > 0) && (
           <div
-            className={cn(FILE_BODY, !stickyFileHeaders && "mt-0 rounded-none")}
+            className={cn(
+              FILE_BODY,
+              (flush || !stickyFileHeaders) && "mt-0 rounded-none",
+            )}
             style={DIFF_SURFACE_STYLE[theme]}
           >
             {isOpen &&
@@ -1063,7 +1076,7 @@ export function CommentableDiff({ patch, options }: Props) {
                   editing={isEditing}
                   createEditor={isEditing ? createEditor : undefined}
                   loadDiffFiles={isEditing ? loadDiffFiles : loadContextFiles}
-                  phone={isPhone}
+                  flatSeparators={isPhone || flush}
                 />
               ))}
             {resolved.length > 0 && (
@@ -1130,7 +1143,10 @@ export function CommentableDiff({ patch, options }: Props) {
   return (
     <div
       ref={setStickyRoot}
-      className={cn("flex flex-col", stickyFileHeaders ? "gap-2.5" : "gap-4")}
+      className={cn(
+        "flex flex-col",
+        flush ? "gap-0" : stickyFileHeaders ? "gap-2.5" : "gap-4",
+      )}
     >
       {isPhone && draft && files[draft.fileIndex] && (
         <PhoneDiffCommentComposer
@@ -1147,7 +1163,12 @@ export function CommentableDiff({ patch, options }: Props) {
         />
       )}
       {confirmation && (
-        <div className="rounded-md bg-green-soft px-3 py-1.5 text-label font-semibold text-green">
+        <div
+          className={cn(
+            "rounded-md bg-green-soft px-3 py-1.5 text-label font-semibold text-green",
+            flush && "mx-2.5 mb-2.5",
+          )}
+        >
           {confirmation}
         </div>
       )}
@@ -1171,12 +1192,18 @@ export function CommentableDiff({ patch, options }: Props) {
               // Group headers are deliberately quieter than file rows: they
               // give scan structure without competing with filenames.
               <section
-                className="flex flex-col gap-[7px] [section+&]:mt-1"
+                className={cn(
+                  "flex flex-col",
+                  flush ? "gap-0" : "gap-[7px] [section+&]:mt-1",
+                )}
                 key={groupKey}
               >
                 <button
                   type="button"
-                  className="flex w-full cursor-pointer items-center gap-[7px] border-none bg-transparent px-[3px] py-1 text-left font-sans text-dim hover:text-fg"
+                  className={cn(
+                    "flex w-full cursor-pointer items-center gap-[7px] border-none bg-transparent px-[3px] py-1 text-left font-sans text-dim hover:text-fg",
+                    flush && "border-b border-solid border-divider px-3.5 py-2",
+                  )}
                   data-diff-group-files={JSON.stringify(
                     group.indices.map((index) => files[index].name),
                   )}
@@ -1207,8 +1234,13 @@ export function CommentableDiff({ patch, options }: Props) {
                 {!collapsed && (
                   <div
                     className={cn(
-                      "flex flex-col border-l border-line pl-3",
-                      stickyFileHeaders ? "gap-[7px]" : "gap-4",
+                      "flex flex-col",
+                      flush
+                        ? "gap-0"
+                        : cn(
+                            "border-l border-line pl-3",
+                            stickyFileHeaders ? "gap-[7px]" : "gap-4",
+                          ),
                     )}
                   >
                     {group.indices.map((index) =>
@@ -1475,7 +1507,7 @@ const FileDiffRow = function FileDiffRow({
   editing,
   createEditor,
   loadDiffFiles,
-  phone,
+  flatSeparators,
 }: {
   file: FileDiffMetadata;
   fileIndex: number;
@@ -1494,7 +1526,8 @@ const FileDiffRow = function FileDiffRow({
   editing?: boolean;
   createEditor?: (options: EditorOptions<Meta>) => DiffsEditor<Meta>;
   loadDiffFiles?: (fd: FileDiffMetadata) => Promise<FileDiffLoadedFiles>;
-  phone?: boolean;
+  /** Draw "unmodified lines" as flat full-width bands (phone, flush panels). */
+  flatSeparators?: boolean;
 }) {
   // FileDiff compares options shallowly and redraws the whole file when any
   // entry differs, so the callbacks in them must keep one identity. The
@@ -1525,7 +1558,7 @@ const FileDiffRow = function FileDiffRow({
     // caret instead.
     enableLineSelection: !editing,
     onLineSelected: handlers.onLineSelected,
-    unsafeCSS: phone ? PHONE_SEPARATOR_CSS : undefined,
+    unsafeCSS: flatSeparators ? FLAT_SEPARATOR_CSS : undefined,
   };
   if (canLoadFiles)
     Object.assign(options, { loadDiffFiles: handlers.loadDiffFiles });
