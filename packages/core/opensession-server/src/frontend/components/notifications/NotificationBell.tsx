@@ -1,8 +1,9 @@
+import { CountBadge } from "../../ui/badge";
 import { useEffect, useRef, useState } from "react";
 import { useNotifications } from "../../hooks/useNotifications";
 import { useShortcutKeys } from "../../hooks/useShortcutBindings";
 import {
-  INBOX_BADGE,
+  INBOX_BADGE_PHONE,
   INBOX_BELL,
   INBOX_POPUP,
   INBOX_POPUP_FOOTER,
@@ -67,9 +68,7 @@ export function NotificationBell() {
         >
           <IconBell size={22} />
           {unread > 0 && (
-            <span className={INBOX_BADGE} aria-hidden="true">
-              {unread > 99 ? "99+" : unread}
-            </span>
+            <CountBadge count={unread} className={INBOX_BADGE_PHONE} />
           )}
         </Popover.Trigger>
       </Tooltip>

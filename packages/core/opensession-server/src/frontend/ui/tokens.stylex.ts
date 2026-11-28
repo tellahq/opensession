@@ -71,7 +71,7 @@ export const color = stylex.defineConsts({
   onScrim: "#fff",
   /** Ink on a solid red or yellow plate (a phone row's swipe actions). */
   onRed: "#fff",
-  onYellow: "#17130a",
+  onYellow: "var(--on-yellow)",
   transparent: "transparent",
   /** The sidebar's hover wash pre-composited onto its surface: an action
    *  chip floating on a hovered row (see base.css). */
@@ -352,6 +352,9 @@ export const focus = stylex.defineConsts({
  * either the way it could with the utilities.
  */
 export const shadow = stylex.defineConsts({
+  /** A 2px cut in the page colour, so a count badge reads apart from the
+   *  icon it sits on. */
+  cutout: "0 0 0 2px var(--bg)",
   /** The glow around a status dot that needs a person: failed, waiting. */
   glowRed: "0 0 6px var(--red)",
   glowBlue: "0 0 6px var(--blue)",
@@ -407,6 +410,11 @@ export const geometry = stylex.defineConsts({
    * it. Never positive, so a taller control keeps its own box.
    */
   touchBleed: "min(0px, calc((100% - 44px) / 2))",
+  /** A count badge: 16px, 18px on a phone, riding 2px past its control's
+   *  top-right corner. */
+  countBadge: "16px",
+  countBadgePhone: "18px",
+  countBadgeOffset: "-2px",
   switchTrackW: "54px",
   switchTrackH: "24px",
   switchThumbW: "32px",

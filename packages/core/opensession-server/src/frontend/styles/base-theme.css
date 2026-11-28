@@ -328,6 +328,8 @@
   --green: #00bc52;
   --green-soft: rgba(0, 188, 82, 0.14);
   --yellow: #d29922;
+  /* Ink on a solid yellow plate: dark here, white on the darker light yellow. */
+  --on-yellow: #17130a;
   /* The wash behind a --yellow label: the "Running" pill. In-progress work is
 	   yellow throughout — the pulsing run indicators and the "In progress"
 	   lane — because green here means a finished, reviewable result. */
@@ -703,6 +705,7 @@ html[data-theme="light"] {
   --green: #009740;
   --green-soft: rgba(0, 151, 64, 0.12);
   --yellow: #9a6700;
+  --on-yellow: #ffffff;
   --yellow-soft: rgba(154, 103, 0, 0.12);
   /* See the note on --yellow-tint above: light mode's ink is too dark and too
 	   desaturated to tint with, so the surface yellow is its own colour. */

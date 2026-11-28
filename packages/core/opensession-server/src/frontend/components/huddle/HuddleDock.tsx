@@ -1,3 +1,4 @@
+import { CountBadge } from "../../ui/badge";
 import { type CSSProperties, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigation } from "../../hooks/useNavigation";
@@ -279,14 +280,7 @@ function Dock() {
                 if (!call.chatOpen) setCollapsed(false);
               }}
             />
-            {call.unread > 0 && (
-              <span
-                aria-hidden
-                className="pointer-events-none absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] leading-none font-semibold text-on-accent tabular-nums"
-              >
-                {call.unread > 9 ? "9+" : call.unread}
-              </span>
-            )}
+            {call.unread > 0 && <CountBadge count={call.unread} max={9} />}
           </span>
         </Tooltip>
         <Menu.Root>

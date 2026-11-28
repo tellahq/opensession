@@ -159,6 +159,9 @@ property, like the side panel plate) keep working unchanged.
      bar above once it has scrolled away (`hooks/useLargeTitle.ts`). Inside
      the phone Settings sheet the sheet's bar names it and `PageTitle`
      renders nothing, like `SettingsHeader`.
+   - A count on an icon control is `<CountBadge>` (`ui/badge.tsx`): 16px,
+     18px on a phone, 11px semibold, a 2px cutout ring. `tone="warning"`
+     sits on yellow with `--on-yellow` ink (white in light, dark in dark).
 
 ### Open decisions
 

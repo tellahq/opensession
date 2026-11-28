@@ -1,6 +1,7 @@
+import { CountBadge } from "../../ui/badge";
 import { useNotifications } from "../../hooks/useNotifications";
 import { MOBILE_SEARCH_BTN } from "../../lib/app-header-classes";
-import { INBOX_BADGE } from "../../lib/inbox-classes";
+import { INBOX_BADGE_PHONE } from "../../lib/inbox-classes";
 import { unreadNotificationCount } from "../../lib/notifications";
 import { IconBell } from "../icons";
 
@@ -17,9 +18,7 @@ export function InboxBarButton({ onOpen }: { onOpen: () => void }) {
     >
       <IconBell size={22} />
       {unread > 0 && (
-        <span className={INBOX_BADGE} aria-hidden="true">
-          {unread > 99 ? "99+" : unread}
-        </span>
+        <CountBadge count={unread} className={INBOX_BADGE_PHONE} />
       )}
     </button>
   );

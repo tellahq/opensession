@@ -1,7 +1,18 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { type LayoutStyles, sx } from "./sx";
-import { color, corner, radius, space, text, weight } from "./tokens.stylex";
+import {
+  color,
+  corner,
+  geometry,
+  leading,
+  media,
+  radius,
+  shadow,
+  space,
+  text,
+  weight,
+} from "./tokens.stylex";
 
 /**
  * Badge — a label that reports state, not an action.
@@ -133,6 +144,66 @@ export function Badge({
     >
       {dot && <span {...stylex.props(styles.dot)} aria-hidden="true" />}
       {children}
+    </span>
+  );
+}
+
+const countStyles = stylex.create({
+  base: {
+    position: "absolute",
+    top: geometry.countBadgeOffset,
+    right: geometry.countBadgeOffset,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: {
+      default: geometry.countBadge,
+      [media.phone]: geometry.countBadgePhone,
+    },
+    minWidth: {
+      default: geometry.countBadge,
+      [media.phone]: geometry.countBadgePhone,
+    },
+    paddingInline: space.s4,
+    borderRadius: radius.capsule,
+    fontSize: text.meta,
+    fontWeight: weight.strong,
+    lineHeight: leading.none,
+    fontVariantNumeric: "tabular-nums",
+    pointerEvents: "none",
+    boxShadow: shadow.cutout,
+  },
+  accent: { backgroundColor: color.accent, color: color.onAccent },
+  warning: { backgroundColor: color.yellow, color: color.onYellow },
+});
+
+export type CountBadgeProps = {
+  count: number;
+  /** Above this the badge reads `max+`. */
+  max?: number;
+  /** Accent for something unread; warning for something waiting on you. */
+  tone?: "accent" | "warning";
+  /** Placement only, for a control whose corner sits elsewhere. */
+  className?: string;
+};
+
+/**
+ * The count on an icon control (the bell, a huddle, queued prompts): one
+ * size, weight and cutout ring, riding the control's top-right corner. The
+ * control itself carries the count in its aria-label, so this is hidden.
+ */
+export function CountBadge({
+  count,
+  max = 99,
+  tone = "accent",
+  className,
+}: CountBadgeProps) {
+  return (
+    <span
+      aria-hidden="true"
+      {...sx([countStyles.base, countStyles[tone]], className)}
+    >
+      {count > max ? `${max}+` : count}
     </span>
   );
 }

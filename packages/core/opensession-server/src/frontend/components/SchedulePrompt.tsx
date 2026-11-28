@@ -1,3 +1,4 @@
+import { CountBadge } from "../ui/badge";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchScheduledPrompts,
@@ -247,9 +248,7 @@ export function SchedulePromptButton({
           />
         )}
         {pending.length > 0 && (
-          <span className="pointer-events-none absolute -top-[5px] -right-[5px] h-[15px] min-w-[15px] rounded-full bg-yellow px-[3px] text-center text-[10px] leading-[15px] font-bold text-white shadow-[0_0_0_2px_var(--bg)]">
-            {pending.length}
-          </span>
+          <CountBadge count={pending.length} tone="warning" />
         )}
       </button>
 

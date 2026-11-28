@@ -91,12 +91,8 @@ export const INBOX_ROW_TIME =
   "duration-micro group-hover:opacity-0 group-focus-within:opacity-0 " +
   "phone:group-hover:opacity-100 phone:group-focus-within:opacity-100";
 
-/** The count on the bell. */
-export const INBOX_BADGE =
-  "pointer-events-none absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center " +
-  "rounded-capsule bg-accent px-1 text-meta font-semibold leading-none text-on-accent tabular-nums " +
-  "phone:top-0.5 phone:right-1.5 phone:h-[18px] phone:min-w-[18px] " +
-  "ring-2 ring-bg";
+/** Where the bell's CountBadge sits on the phone bar's wider glass segment. */
+export const INBOX_BADGE_PHONE = "phone:top-0.5 phone:right-1.5";
 
 /** The desktop bell, sized with its chrome-row neighbours. */
 export const INBOX_BELL =
