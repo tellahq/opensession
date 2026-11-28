@@ -51,9 +51,10 @@ its odd values. A rule in a document does not stop that. A type does.
    Radius is the `--rf` scale (`rounded-xs` to `rounded-2xl`, `control`,
    `popup`) plus named shapes: `rounded-capsule` (a squircled pill),
    `rounded-composer`, `rounded-sheet`, and the new layout's round, unscaled
-   `rounded-tab` and `rounded-pane`. Tailwind inlines its theme, so a
-   `--radius-*` (or any other theme value) does not exist at runtime: an
-   inline style or a stylesheet writes `calc(<step>px * var(--rf))`.
+   `rounded-tab` and `rounded-pane`. Tailwind emits a theme value such as
+   `--radius-popup` as a custom property only when some source references
+   it, so an inline style or a stylesheet writes `calc(<step>px * var(--rf))`
+   rather than depending on that.
    `off-scale-radius` counts raw lengths and steps off the scale.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
