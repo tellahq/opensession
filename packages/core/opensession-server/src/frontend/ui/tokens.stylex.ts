@@ -396,6 +396,12 @@ export const shadow = stylex.defineConsts({
  * 2px inset and a 32x20 capsule knob; `sm` is the same switch at 44x20.
  */
 export const geometry = stylex.defineConsts({
+  /**
+   * How far a hit area reaches past a control to make it 44px tall (the
+   * phone touch target), as a top/bottom inset on an absolute ::after inside
+   * it. Never positive, so a taller control keeps its own box.
+   */
+  touchBleed: "min(0px, calc((100% - 44px) / 2))",
   switchTrackW: "54px",
   switchTrackH: "24px",
   switchThumbW: "32px",

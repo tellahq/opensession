@@ -80,6 +80,7 @@ import {
   color,
   corner,
   focus,
+  geometry,
   leading,
   media,
   motion,
@@ -239,6 +240,17 @@ export const sidebarStyles = stylex.create({
     minHeight: { default: null, [media.desktop]: scale.lineHeightVar },
   },
   headerLane: {
+    // A caption toggles its lane, and on a phone its 34px box is under a
+    // finger's 44: an ::after reaches into the air above and below it to
+    // make up the rest without moving anything.
+    position: { default: "relative", [media.desktop]: null },
+    "::after": {
+      content: { default: null, [media.phone]: '""' },
+      position: "absolute",
+      insetInline: space.s0,
+      top: geometry.touchBleed,
+      bottom: geometry.touchBleed,
+    },
     gap: scale.laneGap,
     paddingTop: { default: scale.lanePadTopPhone, [media.desktop]: space.s4 },
     paddingBottom: {
@@ -253,7 +265,8 @@ export const sidebarStyles = stylex.create({
   headerSelected: { backgroundColor: color.selected, color: color.fg },
   headerInert: { cursor: "default", color: color.dim },
   stickyLane: {
-    position: { default: null, [media.desktop]: "sticky" },
+    // Relative on a phone for the caption's touch ::after (see headerLane).
+    position: { default: "relative", [media.desktop]: "sticky" },
     top: { default: null, [media.desktop]: scale.bandSlotVar },
     zIndex: { default: null, [media.desktop]: scale.laneLayer },
   },
