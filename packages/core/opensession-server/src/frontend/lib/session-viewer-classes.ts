@@ -60,13 +60,14 @@ export const VIEWER_HEADER =
   "viewer-header wco-chrome flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 " +
   "bg-surface px-4 new-layout:bg-transparent " +
   // The new layout's window row is 40px, and a row of 32px controls with
-  // 20px glyphs filled it edge to edge. There they are 28px with 18px glyphs,
-  // which leaves the row its air. Keyed off the row because the controls are
-  // a mix of shared primitives and one-off plates (the PR chip, Merge, the
-  // preview link), exactly as the phone rule on the actions below is.
-  "new-layout:[&_:is(button,a)]:h-7 new-layout:[&_:is(button,a)]:min-h-7 " +
-  "new-layout:[&_:is(button,a):is(:has(>svg:only-child),:has(>:only-child_svg))]:w-7 " +
-  "new-layout:[&_svg]:size-[18px] " +
+  // 20px glyphs filled it edge to edge, and 28px with 18px glyphs read too
+  // small. They are 30px with 20px glyphs, the window row's sidebar controls'
+  // box. Keyed off the row because the controls are a mix of shared
+  // primitives and one-off plates (the PR chip, Merge, the preview link),
+  // exactly as the phone rule on the actions below is.
+  "new-layout:[&_:is(button,a)]:h-7.5 new-layout:[&_:is(button,a)]:min-h-7.5 " +
+  "new-layout:[&_:is(button,a):is(:has(>svg:only-child),:has(>:only-child_svg))]:w-7.5 " +
+  "new-layout:[&_svg]:size-5 " +
   // Beside the tab strip the bar holds only its trailing controls, and the
   // collapsed-sidebar inset belongs to the strip, which now leads the row.
   "[[data-pane-top-row-tabs]~*_&]:pl-2 desktop:[.app-body.sidebar-collapsed_[data-pane-top-row-tabs]~*_&]:pl-2 " +
