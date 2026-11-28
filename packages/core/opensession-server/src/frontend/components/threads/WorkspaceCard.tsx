@@ -197,7 +197,7 @@ function ProgressRow({
                 <Menu.Trigger
                   aria-label="Add collaborator"
                   className={cn(
-                    "grid size-[22px] shrink-0 cursor-pointer place-items-center rounded-avatar border-none bg-active p-0 text-dim shadow-[var(--avatar-edge)] focus-ring",
+                    "grid size-[22px] shrink-0 cursor-pointer place-items-center rounded-avatar border-none bg-active p-0 text-dim shadow-avatar focus-ring",
                     "transition-colors hover:bg-pressed hover:text-fg data-[popup-open]:bg-pressed data-[popup-open]:text-fg",
                     people.length > 0 && "-ml-1",
                   )}

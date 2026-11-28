@@ -1237,7 +1237,7 @@ export function SessionSearch({
                     )}
                     <span className="flex items-center gap-2 overflow-hidden whitespace-nowrap text-meta text-faint">
                       {s.automation ? (
-                        <span className="rounded-sm bg-[color-mix(in_srgb,var(--yellow)_16%,transparent)] px-1.5 py-px text-meta text-yellow">
+                        <span className="rounded-sm bg-yellow/16 px-1.5 py-px text-meta text-yellow">
                           {s.automation}
                         </span>
                       ) : (

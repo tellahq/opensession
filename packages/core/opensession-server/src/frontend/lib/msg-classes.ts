@@ -168,9 +168,7 @@ export const msgSystemToned =
  */
 const SYSTEM_TONE = {
   error: "data-[tone=error]:bg-red-soft data-[tone=error]:text-red",
-  warn:
-    "data-[tone=warn]:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] " +
-    "data-[tone=warn]:text-yellow",
+  warn: "data-[tone=warn]:bg-yellow/10 " + "data-[tone=warn]:text-yellow",
 };
 
 /** `info` deliberately resolves to nothing: it is the pill's resting look. */

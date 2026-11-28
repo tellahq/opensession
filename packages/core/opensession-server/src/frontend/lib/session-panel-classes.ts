@@ -157,7 +157,7 @@ export const PANEL_INFO_TOP = "pt-2 [.panel-pr-plate:not(:empty)~*_&]:pt-0";
  *  the same paint as the main strip's split preview. */
 export const PANEL_DROP_PREVIEW =
   "pointer-events-none absolute inset-2 z-7 rounded-lg border-2 border-accent " +
-  "bg-[color-mix(in_srgb,var(--accent)_18%,transparent)]";
+  "bg-accent/16";
 
 /** The panel's scrolling content. */
 export const PANEL_BODY = "min-h-0 flex-1 overflow-y-auto";

@@ -713,8 +713,7 @@ const INFO_TOPBAR =
 export const infoTopbarClass = (scrolled: boolean) =>
   `${INFO_TOPBAR} ` +
   (scrolled
-    ? "bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] " +
-      "backdrop-blur-[18px] backdrop-saturate-[1.35]"
+    ? "bg-bg/92 " + "backdrop-blur-[18px] backdrop-saturate-[1.35]"
     : "bg-transparent");
 
 const INFO_TOPBAR_TITLE =

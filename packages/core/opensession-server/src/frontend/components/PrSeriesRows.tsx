@@ -55,7 +55,7 @@ const ROW_ACTION =
   "inline-flex h-6 shrink-0 items-center rounded-control border px-2 text-meta font-semibold whitespace-nowrap " +
   "transition-[background-color,filter] duration-micro focus-ring disabled:cursor-default disabled:opacity-60";
 const ROW_ACTION_TONE = {
-  red: "border-[color-mix(in_srgb,var(--red)_78%,black)] bg-[var(--red)] text-white hover:brightness-[1.08]",
+  red: "border-red-deep bg-red text-white hover:brightness-[1.08]",
   "status-red":
     "border-line bg-popup text-red hover:bg-[color-mix(in_srgb,var(--red)_6%,var(--popup-surface))]",
 } as const;

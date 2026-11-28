@@ -250,7 +250,7 @@ export const tabSplitDropPreviewClass = (side: "left" | "right" | "panel") =>
   "pointer-events-none absolute top-[calc(var(--desktop-header-h)+36px)] bottom-2 z-shell-pane " +
   "w-[calc(var(--split-preview-share,50%)-12px)] " +
   "rounded-[calc(10px*var(--rf))] [corner-shape:var(--cs)] border-2 border-accent " +
-  "bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] " +
+  "bg-accent/16 " +
   // A hairline of white inside the accent edge, so the outline still reads
   // against a light screenshot or a pale diff behind it.
   "shadow-[inset_0_0_0_1px_color-mix(in_srgb,white_16%,transparent)] " +

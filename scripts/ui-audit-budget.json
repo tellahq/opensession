@@ -2,9 +2,11 @@
   "raw-button": 302,
   "raw-form-control": 88,
   "arbitrary-text-size": 22,
-  "arbitrary-leading": 2,
   "off-scale-motion": 12,
+  "off-scale-tint": 28,
+  "arbitrary-shadow": 18,
   "off-scale-z": 0,
+  "arbitrary-leading": 2,
   "off-scale-radius": 2,
   "patched-control-height": 30,
   "adhoc-overlay": 8,
@@ -13,7 +15,7 @@
   "stock-palette-color": 0,
   "stock-shadow": 0,
   "stylex-raw-value": 0,
-  "button-restyle": 400,
+  "button-restyle": 399,
   "button-skin": 0,
   "raw-hex-color": 5
 }

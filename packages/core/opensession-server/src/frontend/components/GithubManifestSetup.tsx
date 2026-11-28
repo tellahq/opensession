@@ -98,7 +98,7 @@ function GithubSetupStep({
               <img
                 src={guide}
                 alt=""
-                className="block h-auto w-full rounded-md border border-[var(--tooltip-ring)]"
+                className="block h-auto w-full rounded-md border border-tooltip-ring"
               />
               <span className="block px-1 pt-2 pb-1 text-left text-supporting leading-snug font-normal text-tooltip-fg/75">
                 {caption}

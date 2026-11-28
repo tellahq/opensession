@@ -422,7 +422,7 @@ export function NewSessionPrompt({
           className={cn(
             TEXTAREA,
             promptHighlight &&
-              "relative z-1 break-words text-transparent caret-[var(--text)]",
+              "relative z-1 break-words text-transparent caret-fg",
           )}
           value={sessionNames.displayText}
           onBeforeInput={sessionNames.handleBeforeInput}

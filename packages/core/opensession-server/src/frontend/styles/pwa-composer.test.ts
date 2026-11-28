@@ -20,11 +20,9 @@ const VOICE_CONTROL = new URL(
 );
 
 test("phone composers use the same quiet edge as the desktop ring", () => {
-  expect(composerBox).toContain(
-    "border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]",
-  );
+  expect(composerBox).toContain("border-[color:var(--composer-border)]/35");
   expect(composerFlapBorder).toContain(
-    "border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]",
+    "border-[color:var(--composer-border)]/35",
   );
 });
 

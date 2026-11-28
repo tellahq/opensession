@@ -209,8 +209,8 @@ function RequestCard({
           aria-hidden="true"
           className={
             deleting
-              ? "h-1.5 w-1.5 shrink-0 rounded-full bg-red shadow-[0_0_0_3px_var(--red-soft)]"
-              : "h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-[0_0_0_3px_var(--green-soft)]"
+              ? "h-1.5 w-1.5 shrink-0 rounded-full bg-red shadow-halo-red"
+              : "h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-halo-green"
           }
         />
         <span className="text-label font-semibold text-dim">

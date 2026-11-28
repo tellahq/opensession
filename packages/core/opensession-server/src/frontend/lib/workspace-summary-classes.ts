@@ -110,7 +110,7 @@ export const WS_SUMMARY_ROW =
   // gutter and wash with the row's own ink instead, so the hover reads as the
   // band getting darker rather than as a second colour landing on it.
   BAND_ROW +
-  " [.ws-summary-band_&]:hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]";
+  " [.ws-summary-band_&]:hover:bg-current/6";
 
 /**
  * The one row that holds a real control: the PR headline and its action

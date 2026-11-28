@@ -32,8 +32,7 @@ export const PEOPLE_CHIP_GLYPH =
 
 /** The same slot on the accent plate: the wash is ink, which disappears into a
  *  dark fill, so it inverts with the chip. */
-export const PEOPLE_CHIP_GLYPH_SELECTED =
-  "bg-[color-mix(in_srgb,var(--on-accent)_22%,transparent)] text-on-accent";
+export const PEOPLE_CHIP_GLYPH_SELECTED = "bg-on-accent/22 text-on-accent";
 
 /** "Shipped" and any other heading on the page. A step above the interface
  *  label it started as: it heads the whole list under it, so it reads as a

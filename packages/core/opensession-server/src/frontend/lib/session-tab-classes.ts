@@ -260,7 +260,7 @@ const TAB_BASE =
   `${TAB_CORNERS} border-0 px-2.5 py-1.5 text-label shadow-none ` +
   "transition-[background-color,color] " +
   `phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
-  `phone:shadow-[var(--mobile-header-control-shadow)] ${MOBILE_CONTROL_GLASS_EFFECTS}`;
+  `phone:shadow-header-control ${MOBILE_CONTROL_GLASS_EFFECTS}`;
 
 export type TabState = {
   active: boolean;
@@ -297,8 +297,8 @@ function attachedTabClass({ active, waiting, colored }: TabState): string {
   const surface = colored
     ? active
       ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:color-mix(in_srgb,var(--tab-color)_14%,var(--bg))]"
-      : "border-transparent bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
-        "hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
+      : "border-transparent bg-[color:var(--tab-color)]/10 " +
+        "hover:bg-[color:var(--tab-color)]/16"
     : active
       ? "border-[color:var(--tab-edge,var(--divider))] bg-[var(--tab-fill)] [--tab-fill:var(--bg)]"
       : "border-transparent bg-transparent hover:bg-hover";
@@ -323,8 +323,8 @@ export function tabClass(state: TabState): string {
       ? "bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))] " +
         "hover:bg-[color-mix(in_srgb,var(--tab-color)_28%,var(--bg-panel))] " +
         "phone:bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--mobile-tab-surface-selected))]"
-      : "bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
-        "hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)] " +
+      : "bg-[color:var(--tab-color)]/10 " +
+        "hover:bg-[color:var(--tab-color)]/16 " +
         "phone:bg-[color-mix(in_srgb,var(--tab-color)_9%,var(--mobile-tab-surface))]"
     : active
       ? "bg-panel hover:bg-hover phone:bg-[var(--mobile-tab-surface-selected)]"
@@ -412,7 +412,7 @@ const DOT_BASE = "size-1.5 shrink-0 rounded-full";
 
 export const tabDotClass = (waiting: boolean) =>
   waiting
-    ? `${DOT_BASE} bg-blue shadow-[0_0_6px_var(--blue)] animate-waiting ` +
+    ? `${DOT_BASE} bg-blue shadow-glow-blue animate-waiting ` +
       "motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!"
     : `${DOT_BASE} bg-yellow animate-live ` +
       "motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";

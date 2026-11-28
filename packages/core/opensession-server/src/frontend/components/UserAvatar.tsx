@@ -100,7 +100,7 @@ export function UserAvatar({
           ? "[--avatar-edge:inset_0_0_0_1px_color-mix(in_srgb,var(--text)_14%,transparent)]"
           : "[--avatar-edge:0_0_0_0_transparent]",
         "relative inline-flex shrink-0 items-center justify-center",
-        "rounded-avatar bg-active font-bold text-dim shadow-[var(--avatar-edge)] select-none",
+        "rounded-avatar bg-active font-bold text-dim shadow-avatar select-none",
         className,
       )}
       style={{
@@ -124,7 +124,7 @@ export function UserAvatar({
           // took the radius but kept the squircle, and only the frame's
           // clip hid it. Inheriting the shape as well as the radius is
           // what makes the picture the frame's shape, always.
-          className="absolute inset-0 size-full rounded-[inherit] [corner-shape:inherit] object-cover shadow-[var(--avatar-edge)]"
+          className="absolute inset-0 size-full rounded-[inherit] [corner-shape:inherit] object-cover shadow-avatar"
           loading="lazy"
           draggable={false}
           onError={() => setFailed(true)}

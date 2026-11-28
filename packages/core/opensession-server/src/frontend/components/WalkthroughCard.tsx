@@ -154,7 +154,7 @@ export function WalkthroughCard({
                           // frame around a section: a screenshot of a white
                           // UI ends nowhere on a white card. The demo video
                           // above carries the same one.
-                          className="relative flex w-full cursor-zoom-in items-start justify-center overflow-hidden rounded-md border border-line bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
+                          className="relative flex w-full cursor-zoom-in items-start justify-center overflow-hidden rounded-md border border-line bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-halo-accent-inset"
                           onClick={(event) =>
                             open(`${i}:${side}`, event.currentTarget)
                           }

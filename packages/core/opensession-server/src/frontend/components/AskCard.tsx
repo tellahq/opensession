@@ -299,7 +299,7 @@ export function AskCard({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <span
           aria-hidden="true"
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-[0_0_0_3px_var(--green-soft)]"
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-halo-green"
         />
         <span className="text-label font-semibold text-dim">
           {AGENT_NAME} needs input

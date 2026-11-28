@@ -297,7 +297,7 @@ export function BrowserAnnotationLayer({
           aria-hidden="true"
           className={cn(
             "pointer-events-none absolute rounded-sm border-2 border-blue",
-            pending || press ? "bg-blue/10" : "bg-blue/5",
+            pending || press ? "bg-blue/10" : "bg-blue/6",
           )}
           style={{
             left: marked.x,

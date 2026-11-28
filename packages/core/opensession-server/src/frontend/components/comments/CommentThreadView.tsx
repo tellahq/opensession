@@ -280,7 +280,7 @@ export function ThreadPassage({
   return (
     <blockquote
       className={cn(
-        "m-0 line-clamp-3 border-l-2 border-[color:var(--yellow)] pl-2.5 text-supporting text-dim",
+        "m-0 line-clamp-3 border-l-2 border-yellow pl-2.5 text-supporting text-dim",
         className,
       )}
     >

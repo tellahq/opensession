@@ -162,7 +162,7 @@ export function SpinOffMenu({
   // accent halo this surface authored.
   const fieldCls = fieldClasses(
     "lg",
-    "border-line-strong text-sm focus:shadow-[0_0_0_3px_var(--accent-soft)]",
+    "border-line-strong text-sm focus:shadow-halo-accent",
   );
 
   const flavorMeta: Record<Flavor, { title: string; description: string }> = {

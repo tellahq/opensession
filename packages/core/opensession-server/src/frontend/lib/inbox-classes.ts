@@ -96,7 +96,7 @@ export const INBOX_BADGE =
   "pointer-events-none absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center " +
   "rounded-capsule bg-accent px-1 text-meta font-semibold leading-none text-on-accent tabular-nums " +
   "phone:top-0.5 phone:right-1.5 phone:h-[18px] phone:min-w-[18px] " +
-  "ring-2 ring-[var(--bg)]";
+  "ring-2 ring-bg";
 
 /** The desktop bell, sized with its chrome-row neighbours. */
 export const INBOX_BELL =

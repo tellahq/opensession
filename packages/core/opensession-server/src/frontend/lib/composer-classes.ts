@@ -23,7 +23,7 @@
    .palette-icon-btn`, whose ::before wash is styled from the stylesheet). The
    declarations below are what that rule used to paint. */
 export const composerBox =
-  "relative border border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] " +
+  "relative border border-[color:var(--composer-border)]/35 bg-[var(--composer-surface)] shadow-composer transition-[border-color,box-shadow] " +
   "desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft";
 
 /** Resting/expanded box. `--composer-inset-left` is read by the "+" menu to
@@ -220,7 +220,7 @@ export const fileChipCardPaddingRemovable = "pr-[26px]";
  *  chip has always rendered; closing it up is a design change, not a migration. */
 export const fileChipCardPadding = "pr-[26px]";
 export const fileChipThumb =
-  "inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-[10px] font-bold tracking-wide text-accent";
+  "inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-accent/16 text-[10px] font-bold tracking-wide text-accent";
 export const fileChipMeta = "flex min-w-0 flex-col gap-px";
 /** The chip's title. 13px (text-label) rather than the stylesheet's off-scale
  *  12px — it is interface copy, and the card's height comes from the 34px
@@ -238,7 +238,7 @@ export const fileChipSub = "text-meta text-faint";
  *  strength made the panel behind it about three times darker than the input
  *  in front. Use the same mix everywhere so the two layers keep one edge. */
 export const composerFlapBorder =
-  "pwa-composer-edge border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]";
+  "pwa-composer-edge border-[color:var(--composer-border)]/35";
 
 /* ── The queue flap ───────────────────────────────────────────────
    The flap that folds out from behind the composer: a dimmer panel flush with

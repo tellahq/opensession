@@ -166,6 +166,42 @@
   --color-diff-add: var(--diff-add);
   --color-diff-del: var(--diff-del);
   --color-purple: var(--purple);
+  /* A tone chip (a PR state, a check result): a quarter of the hue laid
+	   over the control surface, so it stays solid on any page. Hovering
+	   deepens whatever hue the chip's text carries. A translucent tint of a
+	   hue is its opacity step instead: `bg-green/10` (soft), `/16`, `/22`
+	   (edge), `/34` (strong), and `/6` for the faintest wash. */
+  --color-tone-green: color-mix(
+    in srgb,
+    var(--green) 24%,
+    var(--control-surface)
+  );
+  --color-tone-yellow: color-mix(
+    in srgb,
+    var(--yellow) 24%,
+    var(--control-surface)
+  );
+  --color-tone-red: color-mix(in srgb, var(--red) 24%, var(--control-surface));
+  --color-tone-blue: color-mix(
+    in srgb,
+    var(--blue) 24%,
+    var(--control-surface)
+  );
+  --color-tone-purple: color-mix(
+    in srgb,
+    var(--purple) 24%,
+    var(--control-surface)
+  );
+  --color-tone-hover: color-mix(
+    in srgb,
+    currentColor 34%,
+    var(--control-surface)
+  );
+  /* The edge of a solid hue plate (a primary PR action): the hue a fifth of
+	   the way to black. */
+  --color-green-deep: color-mix(in srgb, var(--green) 78%, black);
+  --color-red-deep: color-mix(in srgb, var(--red) 78%, black);
+  --color-purple-deep: color-mix(in srgb, var(--purple) 78%, black);
 
   /* Tool-family hues (transcript timeline) */
   --color-tool-run: var(--tool-run);
@@ -276,6 +312,18 @@
 	   `[corner-shape:round]` beside them. */
   --radius-tab: 8px;
   --radius-pane: 10px;
+  /* Named shadows beside the smooth-shadow elevation tiers. A halo is a
+	   status dot's or a focused field's soft 3px ring in its tone; a glow
+	   lights a dot that needs a person. The rest name a surface's own edge,
+	   set where that surface's tokens live (base-theme.css, UserAvatar). */
+  --shadow-halo-green: 0 0 0 3px var(--green-soft);
+  --shadow-halo-red: 0 0 0 3px var(--red-soft);
+  --shadow-halo-accent: 0 0 0 3px var(--accent-soft);
+  --shadow-halo-accent-inset: inset 0 0 0 3px var(--accent-soft);
+  --shadow-glow-blue: 0 0 6px var(--blue);
+  --shadow-avatar: var(--avatar-edge);
+  --shadow-composer: var(--composer-shadow);
+  --shadow-header-control: var(--mobile-header-control-shadow);
   --text-xs: var(--type-label);
   --text-sm: var(--type-label);
   /* Tailwind's stock body alias, kept level with --text-body on purpose: it is

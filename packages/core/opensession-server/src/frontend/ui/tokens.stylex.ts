@@ -59,6 +59,14 @@ export const color = stylex.defineConsts({
   redSoft: "var(--red-soft)",
   blue: "var(--blue)",
   blueSoft: "var(--blue-soft)",
+  /** A tone chip: a quarter of the hue over the control surface, solid on
+   *  any page (Tailwind's `bg-tone-*`). Hovering deepens the chip's ink. */
+  toneGreen: "color-mix(in srgb, var(--green) 24%, var(--control-surface))",
+  toneYellow: "color-mix(in srgb, var(--yellow) 24%, var(--control-surface))",
+  toneRed: "color-mix(in srgb, var(--red) 24%, var(--control-surface))",
+  toneBlue: "color-mix(in srgb, var(--blue) 24%, var(--control-surface))",
+  tonePurple: "color-mix(in srgb, var(--purple) 24%, var(--control-surface))",
+  toneHover: "color-mix(in srgb, currentColor 34%, var(--control-surface))",
   // Ink on a dark media scrim, where the theme does not apply.
   onScrim: "#fff",
   /** Ink on a solid red or yellow plate (a phone row's swipe actions). */
@@ -336,6 +344,11 @@ export const shadow = stylex.defineConsts({
   /** The glow around a status dot that needs a person: failed, waiting. */
   glowRed: "0 0 6px var(--red)",
   glowBlue: "0 0 6px var(--blue)",
+  /** A status dot's or a focused field's soft 3px ring in its tone
+   *  (Tailwind's `shadow-halo-*`). */
+  haloGreen: "0 0 0 3px var(--green-soft)",
+  haloRed: "0 0 0 3px var(--red-soft)",
+  haloAccent: "0 0 0 3px var(--accent-soft)",
   /** A lane lit up as a drop target. */
   dropRing: "inset 0 0 0 1px var(--accent, #6b8afd)",
   xs: "0 1px 2px -1px color-mix(in srgb, var(--tw-shadow-color, black) 5%, transparent), 0 2px 5px -3px color-mix(in srgb, var(--tw-shadow-color, black) 7%, transparent)",

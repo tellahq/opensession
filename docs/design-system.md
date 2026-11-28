@@ -56,6 +56,16 @@ its odd values. A rule in a document does not stop that. A type does.
    it, so an inline style or a stylesheet writes `calc(<step>px * var(--rf))`
    rather than depending on that.
    `off-scale-radius` counts raw lengths and steps off the scale.
+   A translucent hue is an opacity step, not a hand-written `color-mix`:
+   `bg-<hue>/6`, `/10` (soft), `/16`, `/22` (edge), `/34` (strong) and
+   `/40` (a tinted line). A tone chip that has to stay solid takes
+   `bg-tone-<hue>` and deepens with `bg-tone-hover`; a solid hue plate's
+   edge is `border-<hue>-deep`. A theme color is written by name
+   (`bg-red`, not `bg-[var(--red)]`). Shadows are the smooth-shadow tiers
+   or a named one: `shadow-halo-<tone>` (a dot's or a focused field's 3px
+   ring), `shadow-glow-blue`, `shadow-avatar`, `shadow-composer` and
+   `shadow-header-control`, mirrored as `shadow.*` and `color.tone*` in
+   StyleX. `off-scale-tint` and `arbitrary-shadow` count the rest.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
    choices the system has made, plus an `xstyle` prop whose type only accepts

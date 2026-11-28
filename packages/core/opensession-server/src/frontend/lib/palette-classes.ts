@@ -54,7 +54,7 @@ export const paletteIconBtn =
  *  ring read as a validation outline, and it is the one thing that survived
  *  on the plan-mode surface, which carries its own accent tint. */
 export const paletteIconBtnOn =
-  "text-accent hover:text-accent before:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] hover:before:bg-[color-mix(in_srgb,var(--accent)_24%,transparent)]";
+  "text-accent hover:text-accent before:bg-accent/16 hover:before:bg-accent/22";
 
 /* ── The model/effort pill ────────────────────────────────────────
    ModelEffortSelect's trigger, in the composer toolbar and in the new-session
