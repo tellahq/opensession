@@ -1,3 +1,4 @@
+import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import type { TabStripPlacement } from "../lib/split-tabs";
 import { AGENT_NAME } from "../lib/brand";
 import {
@@ -14,7 +15,6 @@ import React, {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { motion } from "motion/react";
 import type {
   UnifiedSession,
   Workspace,
@@ -43,7 +43,6 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { useSidePanel } from "../hooks/useSidePanel";
 import {
   IconArchive,
-  IconArrowUpToLine,
   IconChevronLeft,
   IconChevronRight,
   IconDotsHorizontal,
@@ -111,7 +110,6 @@ import {
   resolveNewSessionModel,
 } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
-import { duration, ease } from "../ui/motion";
 import { mainSession } from "../lib/landing-session";
 import { sessionCarriesPr } from "../lib/session-prs";
 import type { NewTabMorphOrigin } from "../lib/session-tabs-types";
@@ -1035,31 +1033,7 @@ export function WorkspacePane({
   // info panel already say which workspace it belongs to.
   return withPanel(
     <div className={`${VIEW_MAIN} flex flex-col h-full min-h-0`}>
-      {fileDragActive &&
-        createPortal(
-          <>
-            <motion.div
-              className="pointer-events-none fixed inset-0 z-drop-target flex flex-col items-center justify-center bg-panel/68 px-6 text-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ type: "tween", duration: duration.base, ease }}
-              aria-hidden="true"
-              data-file-drop-overlay
-            >
-              <IconArrowUpToLine size={40} className="text-fg" />
-              <div className="mt-4 text-dialog-title font-title text-fg">
-                Add files
-              </div>
-              <div className="mt-1 text-label text-dim">
-                Drop here to attach them to your message.
-              </div>
-            </motion.div>
-            <span className="sr-only" role="status">
-              Drop files to attach
-            </span>
-          </>,
-          document.body,
-        )}
+      <FullPageFileDropOverlay active={fileDragActive} />
       <div className="flex-1 min-h-0 overflow-y-auto" />
       <div className="w-full max-w-page-narrow mx-auto px-5 pb-5 shrink-0">
         <Composer

@@ -1,3 +1,4 @@
+import { FullPageFileDropOverlay } from "../FullPageFileDropOverlay";
 import type { TabStripPlacement } from "../../lib/split-tabs";
 import { useSessionVoice } from "../../hooks/useSessionVoice";
 import { useScrollEdge } from "../../hooks/useScrollEdge";
@@ -14,9 +15,7 @@ import type {
   SetStateAction,
 } from "react";
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
-import { duration, ease } from "../../ui/motion";
+import { AnimatePresence } from "motion/react";
 import { InlineAlert } from "../../ui/state";
 import { AGENT_NAME } from "../../lib/brand";
 import { withQuotes, type Quote } from "../../lib/quotes";
@@ -80,7 +79,6 @@ import {
   IconArrowDown,
   IconArrowRight,
   IconArrowUp,
-  IconArrowUpToLine,
   IconChevronRight,
   IconEye,
 } from "../icons";
@@ -867,35 +865,7 @@ export function SessionViewerMainRegion({
             className="relative flex min-h-0 flex-1 flex-col"
             data-session-find-scope
           >
-            {fileDragActive &&
-              createPortal(
-                <>
-                  <motion.div
-                    className="pointer-events-none fixed inset-0 z-drop-target flex flex-col items-center justify-center bg-panel/68 px-6 text-center"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{
-                      type: "tween",
-                      duration: duration.base,
-                      ease,
-                    }}
-                    aria-hidden="true"
-                    data-file-drop-overlay
-                  >
-                    <IconArrowUpToLine size={40} className="text-fg" />
-                    <div className="mt-4 text-dialog-title font-title text-fg">
-                      Add files
-                    </div>
-                    <div className="mt-1 text-label text-dim">
-                      Drop here to attach them to your message.
-                    </div>
-                  </motion.div>
-                  <span className="sr-only" role="status">
-                    Drop files to attach
-                  </span>
-                </>,
-                document.body,
-              )}
+            <FullPageFileDropOverlay active={fileDragActive} />
             {/* The step lives here rather than on the scroller alone, so the
 					    pills floating beside it inherit it too and stay on the reading
 					    column instead of the middle of the pane. */}

@@ -1,16 +1,45 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
+import * as stylex from "@stylexjs/stylex";
 import { IconArrowUpToLine } from "./icons";
 import { duration, ease } from "../ui/motion";
+import { blur, color, layer, space, text, weight } from "../ui/tokens.stylex";
+
+const styles = stylex.create({
+  wash: {
+    pointerEvents: "none",
+    position: "fixed",
+    inset: space.s0,
+    zIndex: layer.dropTarget,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: color.dropWash,
+    backdropFilter: blur.dropWash,
+    paddingInline: space.s24,
+    textAlign: "center",
+  },
+  glyph: { color: color.fg },
+  title: {
+    marginTop: space.s16,
+    fontSize: text.dialogTitle,
+    fontWeight: weight.title,
+    color: color.fg,
+  },
+  detail: { marginTop: space.s4, fontSize: text.label, color: color.dim },
+});
 
 interface FullPageFileDropOverlayProps {
   active: boolean;
 }
 
-/** Full-page feedback for a file drag owned by the foreground composer. The
- * window-level owner handles the drop, so this stays visual and never blocks
- * a modal, menu, or any other part of the page. */
+/** The one feedback for a file dragged over the app: the whole page washes
+ * out under "Add files". Whichever composer owns the drop (a session, a
+ * workspace, a new session, the Desk) renders this; the window-level owner
+ * handles the drop itself, so this stays visual and never blocks a modal, a
+ * menu, or any other part of the page. */
 export function FullPageFileDropOverlay({
   active,
 }: FullPageFileDropOverlayProps) {
@@ -21,7 +50,7 @@ export function FullPageFileDropOverlay({
       <AnimatePresence initial={false}>
         {active && (
           <motion.div
-            className="pointer-events-none fixed inset-0 z-drop-target flex flex-col items-center justify-center bg-panel/68 px-6 text-center [backdrop-filter:blur(8px)]"
+            {...stylex.props(styles.wash)}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -29,11 +58,9 @@ export function FullPageFileDropOverlay({
             aria-hidden="true"
             data-composer-file-drop-overlay
           >
-            <IconArrowUpToLine size={40} className="text-fg" />
-            <div className="mt-4 text-dialog-title font-title text-fg">
-              Add files
-            </div>
-            <div className="mt-1 text-label text-dim">
+            <IconArrowUpToLine size={40} {...stylex.props(styles.glyph)} />
+            <div {...stylex.props(styles.title)}>Add files</div>
+            <div {...stylex.props(styles.detail)}>
               Drop anywhere to attach them to your message.
             </div>
           </motion.div>

@@ -93,6 +93,8 @@ export const color = stylex.defineConsts({
   /** A pane washed out in its own page colour while work it cannot show
    *  finishes (a session being deleted). */
   veil: "color-mix(in srgb, var(--bg) 72%, transparent)",
+  /** The whole page under a file drag: the panel colour, see-through. */
+  dropWash: "color-mix(in srgb, var(--bg-panel) 68%, transparent)",
   scrimLight: "rgb(0 0 0 / 0.22)",
   /** The heavier dimming under a bottom sheet or sheet-style dialog. */
   scrimSheet: "rgb(0 0 0 / 0.45)",
@@ -695,6 +697,7 @@ export const layer = stylex.defineConsts({
 export const blur = stylex.defineConsts({
   scrim: "blur(1px)",
   veil: "blur(2px)",
+  dropWash: "blur(8px)",
   paletteScrim: "blur(6px)",
   /** The phone top bar's glass. base-theme.css swaps the fill when the
    *  browser has no backdrop-filter or the person asks for less transparency. */
