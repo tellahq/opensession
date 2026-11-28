@@ -75,6 +75,12 @@ its odd values. A rule in a document does not stop that. A type does.
    `geometry.page*` and `geometry.card`. An inline status dot is
    `size-dot-inline`. `arbitrary-size` counts every other raw length on a
    size, width or height utility.
+   Spacing is StyleX's `space` scale, in Tailwind steps 0 to 12 (0 to
+   48px, 2px apart up to 16, then 20, 24, 32, 40, 48) plus `px` for a
+   hairline. `off-scale-spacing` counts arbitrary pixel spacing and steps
+   off the scale; the odd values left (3, 5, 7, 9, 11px) are mostly
+   border-compensated or optical insets, folded component by component as
+   each area moves to StyleX, with a parity check per component.
    Keyboard focus is one ring, 2px of accent ink: `focus-ring` draws it
    2px outside the box, and `focus-ring-inset` draws the same ring inside,
    for a row whose rounded list clips anything outside it.
