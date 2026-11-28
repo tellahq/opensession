@@ -1722,7 +1722,7 @@ export function NewSession({
                       <Menu.Shortcut>{attachChord}</Menu.Shortcut>
                     )}
                   </Menu.Item>
-                  <Menu.Separator className="my-1" />
+                  <Menu.Separator />
                   {!forceMode && (
                     <Menu.CheckboxItem
                       checked={permission === "ask"}

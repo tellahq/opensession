@@ -19,6 +19,7 @@ import {
   IconCopy,
   IconDotsVertical,
   IconFile,
+  IconArrowRight,
   IconLink,
   IconMessage,
   IconPencil,
@@ -31,6 +32,8 @@ import { ChannelComposer } from "./ChannelComposer";
 import { EmojiPicker } from "./EmojiPicker";
 import { RichAttachments, RichBlocks } from "./RichContent";
 import { SlackText } from "./SlackText";
+
+const JUMP_GLYPH = <IconArrowRight size={22} />;
 
 function Reactions({
   reactions,
@@ -53,7 +56,7 @@ function Reactions({
           className={cn(
             "inline-flex h-6 min-h-0 w-auto items-center gap-1 rounded-full border px-2 py-0 text-meta leading-none",
             r.mine
-              ? "border-accent bg-accent-soft text-accent"
+              ? "border-accent bg-accent-soft text-accent-ink"
               : "border-transparent bg-hover text-dim hover:border-line-strong",
           )}
         >
@@ -114,7 +117,7 @@ function Files({ files }: { files: NonNullable<ChannelMessage["files"]> }) {
             href={file.permalink}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex w-fit max-w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-body text-fg hover:bg-hover"
+            className="inline-flex w-fit max-w-full items-center gap-2 rounded-lg border border-line px-3 py-2 text-body text-fg no-underline hover:bg-hover"
           >
             <IconFile size={20} className="shrink-0 text-dim" />
             <span className="truncate">{file.name}</span>
@@ -202,6 +205,9 @@ export function ChannelMessageRow({
   onSaveEdit,
   onCancelEdit,
   onDelete,
+  onJump,
+  inThread = false,
+  highlight = false,
   className,
 }: {
   message: ChannelMessage;
@@ -220,6 +226,12 @@ export function ChannelMessageRow({
   onCancelEdit?: () => void;
   /** Present for the person's own message: delete it, after a confirm. */
   onDelete?: () => void;
+  /** A search result: open its conversation at it. */
+  onJump?: () => void;
+  /** A search result that is a thread reply. */
+  inThread?: boolean;
+  /** Just opened at: marked for a moment, as Slack does. */
+  highlight?: boolean;
   /** Placement, and a corner for a row inside a rounded card. */
   className?: string;
 }) {
@@ -233,10 +245,12 @@ export function ChannelMessageRow({
     // selects the message and shows its actions.
     <div
       tabIndex={-1}
+      data-ts={message.ts}
       className={cn(
-        "group relative flex gap-2 px-5 outline-none transition-colors hover:bg-hover focus-within:bg-hover",
+        "group relative flex gap-2 px-5 outline-none transition-colors duration-long hover:bg-hover focus-within:bg-hover",
         head ? "mt-1 pt-2 pb-1" : "py-0.5",
-        (threadOpen || editing) && "bg-yellow-soft hover:bg-yellow-soft",
+        (threadOpen || editing || highlight) &&
+          "bg-yellow-soft hover:bg-yellow-soft",
         className,
       )}
     >
@@ -249,7 +263,7 @@ export function ChannelMessageRow({
             className="mt-0.5 rounded-md"
           />
         ) : (
-          <span className="invisible block pt-0.5 text-right text-meta leading-5 text-faint tabular-nums group-hover:visible">
+          <span className="invisible block text-right text-meta leading-5.5 text-faint tabular-nums group-hover:visible">
             {messageTime(message.ts).replace(/\s?[AP]M$/i, "")}
           </span>
         )}
@@ -257,7 +271,7 @@ export function ChannelMessageRow({
       <div className="min-w-0 flex-1">
         {head && (
           <div className="flex items-baseline gap-2">
-            <span className="select-text text-item-title font-bold text-fg">
+            <span className="select-text text-body leading-body font-bold text-fg">
               {message.userName}
             </span>
             {message.isBot && (
@@ -265,10 +279,23 @@ export function ChannelMessageRow({
                 App
               </span>
             )}
-            <span className="text-meta text-faint tabular-nums">
-              {messageTime(message.ts)}
-            </span>
+            {onJump ? (
+              // Slack opens a result from its time, as a link to it.
+              <ListRow
+                onClick={onJump}
+                className="min-h-0 w-auto p-0 text-meta text-faint tabular-nums hover:text-link hover:underline"
+              >
+                {messageTime(message.ts)}
+              </ListRow>
+            ) : (
+              <span className="text-meta text-faint tabular-nums">
+                {messageTime(message.ts)}
+              </span>
+            )}
           </div>
+        )}
+        {inThread && (
+          <div className="text-meta text-faint">Replied in a thread</div>
         )}
         {message.broadcast && (
           <div className="text-meta text-faint">Replied to a thread</div>
@@ -302,7 +329,7 @@ export function ChannelMessageRow({
         {onOpenThread && replies > 0 && (
           <ListRow
             onClick={onOpenThread}
-            className="group/replies mt-1 -ml-1 min-h-0 w-full max-w-[600px] items-center gap-2 rounded-md border border-transparent px-1 py-1 text-meta hover:border-line hover:bg-panel"
+            className="group/replies mt-1 -ml-1 min-h-0 w-full max-w-[600px] items-center gap-2 rounded-md border border-transparent px-1 py-1 text-label hover:border-line hover:bg-panel"
           >
             {!!message.replyUsers?.length && (
               <span className="flex gap-1" aria-hidden>
@@ -337,6 +364,21 @@ export function ChannelMessageRow({
             "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100",
           )}
         >
+          {onJump && (
+            <Tooltip
+              label={inThread ? "Open in thread" : "Open in conversation"}
+            >
+              <Button
+                variant="ghost"
+                size="md"
+                icon={JUMP_GLYPH}
+                aria-label={
+                  inThread ? "Open in thread" : "Open in conversation"
+                }
+                onClick={onJump}
+              />
+            </Tooltip>
+          )}
           {onReact && (
             <EmojiPicker
               side="bottom"

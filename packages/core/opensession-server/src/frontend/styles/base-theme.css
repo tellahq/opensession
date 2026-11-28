@@ -124,20 +124,15 @@
   /* Glass. The same fill, thinned so the page shows through, over a blur
 	   heavy enough that what shows through is colour and shape rather than
 	   somebody else's sentence — a popup you can read a row title through is
-	   not translucent, it is broken. Written once here rather than per theme:
-	   --popup-surface re-resolves under html[data-theme], so the mix follows.
-	   Both are overridden back to opaque at the bottom of this block's file
-	   for browsers without backdrop-filter and for reduced transparency. */
-  --popup-glass: color-mix(in srgb, var(--popup-surface) 72%, transparent);
+	   not translucent, it is broken. One density for every popup, the
+	   palette included: at 88% a bright image behind a dark menu reads as a
+	   tint rather than a grey band, and its dim glyphs keep 3:1. Written once
+	   here rather than per theme: --popup-surface re-resolves under
+	   html[data-theme], so the mix follows. It is overridden back to opaque at
+	   the bottom of this file for browsers without backdrop-filter and for
+	   reduced transparency. */
+  --popup-glass: color-mix(in srgb, var(--popup-surface) 88%, transparent);
   --popup-blur: blur(20px) saturate(1.8);
-  /* The command palette's own glass. Denser than a menu's for two reasons: it
-	   is a big empty box rather than a strip of rows — the same reason
-	   --composer-surface and --popup-surface go white in light instead of
-	   following the ramp down — and it is the one popup with a dimming backdrop
-	   underneath, which composites THROUGH the fill and drags a 72% mix down to
-	   a grey slab. At 88% the page's colour and shape still read through it and
-	   the surface stays paper. */
-  --palette-glass: color-mix(in srgb, var(--popup-surface) 88%, transparent);
   /* The composer's own fill + edge. In dark it IS --control-surface: lighter
 	   than the page, so the box already reads as lifted. Light needs its own
 	   pair — see the light block. */
@@ -688,7 +683,7 @@ html[data-theme="light"] {
   --scrollbar-thumb: rgba(0, 0, 0, 0.15);
   --text: #1a1a1a;
   --text-dim: #646464;
-  --text-faint: #949494;
+  --text-faint: #848484;
   --reasoning-shimmer-contrast: oklch(1 0 0 / 0.75);
   --accent: var(--text);
   --on-accent: var(--bg);
@@ -745,7 +740,6 @@ html[data-theme="light"] {
 @supports not (backdrop-filter: blur(1px)) {
   :root {
     --popup-glass: var(--popup-surface);
-    --palette-glass: var(--popup-surface);
     /* The page colour, which is what these controls were painted in before
 		   they became glass: without a blur behind it a thinned fill is just a
 		   window onto whatever is scrolling past. */
@@ -756,7 +750,6 @@ html[data-theme="light"] {
 @media (prefers-reduced-transparency: reduce) {
   :root {
     --popup-glass: var(--popup-surface);
-    --palette-glass: var(--popup-surface);
     --mobile-header-control-surface: var(--bg);
   }
 }
@@ -770,7 +763,12 @@ html[data-theme="light"] {
    --accent-soft becomes a hue-tinted wash/ring/shadow. */
 html[data-accent] {
   --accent: var(--accent-dark);
-  --accent-ink: var(--accent-ink-dark, var(--accent));
+  /* The readable form: a step past the fill toward the page's far end, so a
+	   label in the accent clears 4.5:1 on the page and on --accent-soft. */
+  --accent-ink: var(
+    --accent-ink-dark,
+    color-mix(in srgb, var(--accent) 80%, #ffffff)
+  );
   --on-accent: var(--on-accent-dark, #ffffff);
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   /* A hue has somewhere to go that ink does not, so it deepens instead of
@@ -788,19 +786,22 @@ html[data-accent] {
 
 html[data-theme="light"][data-accent] {
   --accent: var(--accent-light);
-  --accent-ink: var(--accent-ink-light, var(--accent));
+  --accent-ink: var(
+    --accent-ink-light,
+    color-mix(in srgb, var(--accent) 88%, #000000)
+  );
   --on-accent: var(--on-accent-light, #ffffff);
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
   --bubble-user: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
 
 html[data-accent="sky"] {
-  --accent-light: #1d82bc;
+  --accent-light: #1c7db4;
   --accent-dark: #2495d6;
 }
 
 html[data-accent="indigo"] {
-  --accent-light: #366ef5;
+  --accent-light: #356df3;
   --accent-dark: #5386f6;
 }
 
@@ -810,7 +811,7 @@ html[data-accent="coral"] {
 }
 
 html[data-accent="orange"] {
-  --accent-light: #d3571c;
+  --accent-light: #c6521a;
   --accent-dark: #eb6221;
 }
 
@@ -857,7 +858,7 @@ html[data-theme="dark"][data-accent="mono"] {
 }
 
 html[data-accent="green"] {
-  --accent-light: #1e8e45;
+  --accent-light: #1d8842;
   --accent-dark: #24a351;
 }
 

@@ -92,7 +92,6 @@
   --color-popup-glass: var(--popup-glass);
   /* The same paper, denser, for the command palette — a big box over a dimming
 	   backdrop needs more body than a strip of menu rows (see base.css). */
-  --color-palette-glass: var(--palette-glass);
   /* bg-hover is the interaction *wash* (translucent ink, so it reads the same
 	   strength over any surface) — that's what `hover:bg-hover` wants at all of
 	   its call sites. bg-active stays an opaque surface: it's used as one (switch

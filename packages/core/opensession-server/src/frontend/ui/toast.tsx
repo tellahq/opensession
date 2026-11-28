@@ -13,6 +13,7 @@ import {
   IconRestore,
   IconServer,
   IconTrash,
+  IconWarningTriangle,
 } from "../components/icons";
 import { useIsPhone } from "../hooks/useIsPhone";
 import {
@@ -401,9 +402,7 @@ function ToastStatusIcon({
       return <IconTrash size={20} className={className} aria-hidden />;
     case "error":
       return (
-        <span aria-hidden {...stylex.props(styles.errorGlyph)}>
-          !
-        </span>
+        <IconWarningTriangle size={20} className={className} aria-hidden />
       );
     default:
       return null;
@@ -590,17 +589,6 @@ const styles = stylex.create({
   },
   glyph: { flexShrink: 0, color: color.dim },
   dim: { color: color.dim },
-  errorGlyph: {
-    display: "grid",
-    width: space.s14,
-    height: space.s14,
-    flexShrink: 0,
-    placeItems: "center",
-    borderRadius: radius.pill,
-    fontSize: text.meta,
-    fontWeight: weight.strong,
-    color: color.dim,
-  },
   progress: {
     pointerEvents: "none",
     position: "absolute",

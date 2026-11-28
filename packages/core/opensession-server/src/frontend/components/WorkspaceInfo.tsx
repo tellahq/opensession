@@ -278,7 +278,7 @@ const STATUS_MARK: Record<
   renamed: {
     label: "Renamed",
     glyph: "→",
-    className: "bg-accent-soft text-accent",
+    className: "bg-accent-soft text-accent-ink",
   },
 };
 

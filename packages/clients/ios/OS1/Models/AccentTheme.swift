@@ -58,12 +58,12 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     /// the page, which is why it is the only fill whose glyph changes.
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
-        case .sky: (0x1D_82_BC, 0x24_95_D6)
-        case .indigo: (0x36_6E_F5, 0x53_86_F6)
+        case .sky: (0x1C_7D_B4, 0x24_95_D6)
+        case .indigo: (0x35_6D_F3, 0x53_86_F6)
         case .coral: (0xDD_23_3A, 0xF7_36_48)
-        case .orange: (0xD3_57_1C, 0xEB_62_21)
+        case .orange: (0xC6_52_1A, 0xEB_62_21)
         case .lime: (0xEE_C7_5C, 0xEE_C7_5C)
-        case .green: (0x1E_8E_45, 0x24_A3_51)
+        case .green: (0x1D_88_42, 0x24_A3_51)
         case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
     }

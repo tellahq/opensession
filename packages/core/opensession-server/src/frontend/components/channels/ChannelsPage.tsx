@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useChannelMessages } from "../../hooks/useChannelMessages";
 import { useNavigation } from "../../hooks/useNavigation";
@@ -9,6 +15,7 @@ import {
   type Conversation,
   type ConversationInfo,
 } from "../../lib/api/slack-channels";
+import { needsOlder, takeJump } from "../../lib/channel-jump";
 import { lastEditable, layoutMessages } from "../../lib/channel-messages";
 import { docTitle } from "../../lib/brand";
 import {
@@ -19,6 +26,7 @@ import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { useConfirm } from "../../ui/confirm";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
+import { toast } from "../../ui/toast";
 import { Tooltip } from "../../ui/tooltip";
 import { IconHash, IconPeople, IconX } from "../icons";
 import { ChannelCallButton } from "./ChannelCallButton";
@@ -26,6 +34,7 @@ import { ChannelComposer, type ComposerHandle } from "./ChannelComposer";
 import { ChannelMessageRow } from "./ChannelMessageRow";
 import { ConversationGlyph, ConversationList } from "./ConversationList";
 import { DraftsPage } from "./DraftsPage";
+import { SearchPage } from "./SearchPage";
 import { FileDropZone } from "./FileDropZone";
 import { ThreadsPage } from "./ThreadsPage";
 
@@ -62,6 +71,39 @@ function MessageList({
   const stick = useRef(true);
   const items = layoutMessages(state.messages);
   const [confirm, confirmDialog] = useConfirm();
+
+  // Opened from a search result: page back to the message if it is older
+  // than what loaded, then bring it to the middle and mark it.
+  const [jumpTo, setJumpTo] = useState(() => takeJump(channelId));
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const pagesLeft = useRef(10);
+  const stepJump = useEffectEvent(() => {
+    if (!jumpTo || state.loading || state.loadingOlder) return;
+    if (needsOlder(state.messages, jumpTo, state.hasMore, pagesLeft.current)) {
+      pagesLeft.current -= 1;
+      void state.loadOlder();
+      return;
+    }
+    setJumpTo(undefined);
+    const row = scrollRef.current?.querySelector(
+      `[data-ts="${CSS.escape(jumpTo)}"]`,
+    );
+    if (!row) {
+      toast("That message is too far back to show here");
+      return;
+    }
+    stick.current = false;
+    row.scrollIntoView({ block: "center" });
+    setHighlighted(jumpTo);
+  });
+  useEffect(() => {
+    stepJump();
+  }, [jumpTo, state.messages, state.loading, state.loadingOlder]);
+  useEffect(() => {
+    if (!highlighted) return;
+    const timer = setTimeout(() => setHighlighted(null), 2500);
+    return () => clearTimeout(timer);
+  }, [highlighted]);
   const askDelete = (message: ChannelMessage) =>
     confirm({
       title: "Delete message?",
@@ -129,7 +171,7 @@ function MessageList({
               onClick={() => void state.loadOlder()}
               disabled={state.loadingOlder}
             >
-              {state.loadingOlder ? "Loading" : "Load earlier messages"}
+              {state.loadingOlder ? "Loading…" : "Load earlier messages"}
             </Button>
           </div>
         )}
@@ -165,6 +207,7 @@ function MessageList({
                 message={item.message}
                 head={item.head}
                 threadOpen={openThread === item.message.ts}
+                highlight={highlighted === item.message.ts}
                 onReact={
                   state.asUser
                     ? (name, emoji) => state.react(item.message, name, emoji)
@@ -367,6 +410,8 @@ export function ChannelsPage({
 
   if (route.page === "threads") return <ThreadsPage navigate={navigate} />;
   if (route.page === "drafts") return <DraftsPage navigate={navigate} />;
+  if (route.page === "search")
+    return <SearchPage query={route.query} navigate={navigate} />;
 
   if (!route.id) {
     if (phone)

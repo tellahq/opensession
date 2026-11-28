@@ -48,10 +48,10 @@ const styles = stylex.create({
     // corner.
     position: "relative",
     overflow: "hidden",
-    // The glass the menus are made of, denser because this one sits over a
-    // dimming backdrop. --palette-glass falls back to the opaque fill without
-    // backdrop-filter and under prefers-reduced-transparency (base.css).
-    backgroundColor: color.paletteGlass,
+    // The glass the menus are made of. --popup-glass falls back to the opaque
+    // fill without backdrop-filter and under prefers-reduced-transparency
+    // (base-theme.css).
+    backgroundColor: color.popupGlass,
     backdropFilter: "var(--popup-blur)",
     // Drops in from just above its resting place, the way a palette
     // summoned by a keystroke should.
@@ -187,7 +187,8 @@ const styles = stylex.create({
   // painted edge rather than behind it.
   description: { marginTop: `calc(-1 * ${space.s2})` },
   // A 32px circle with an invisible 4px apron, so the corner target is
-  // bigger than the glyph's wash.
+  // bigger than the glyph's wash. On a phone the apron grows to the 44px
+  // touch target without moving the glyph.
   close: {
     position: "relative",
     marginRight: `calc(-1 * ${space.s6})`,
@@ -215,7 +216,10 @@ const styles = stylex.create({
     "::after": {
       content: "''",
       position: "absolute",
-      inset: `calc(-1 * ${space.s4})`,
+      inset: {
+        default: `calc(-1 * ${space.s4})`,
+        [media.phone]: geometry.touchBleed,
+      },
     },
   },
   footer: {

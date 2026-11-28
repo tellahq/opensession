@@ -50,7 +50,7 @@ const PALETTE = {
     bg: "#ffffff",
     text: "#1a1a1a",
     dim: "#646464",
-    faint: "#949494",
+    faint: "#848484",
     border: "#e2e2e2",
     panel: "#f6f6f6",
     well: "#f6f8fa",

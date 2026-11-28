@@ -2081,7 +2081,7 @@ function AutomationForm({
             Back
           </Button>
         )}
-        <Button variant="soft" onClick={onClose} disabled={saving}>
+        <Button variant="ghost" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button
