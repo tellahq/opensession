@@ -561,11 +561,7 @@ export function LibraryPanel() {
           </div>
           <SettingsHint className="mt-4 px-0">
             {group.type === "tool" ? (
-              <>
-                {TYPE_BLURB.tool} These switches are saved in this browser only,
-                and a tool you turn off still sends its reminders and
-                notifications.
-              </>
+              <>{TYPE_BLURB.tool} Saved in this browser.</>
             ) : (
               TYPE_BLURB[group.type]
             )}

@@ -90,12 +90,8 @@ export function KeychainSection() {
   );
   const hint = (
     <SettingsHint>
-      Any teammate's session can ask to borrow a credential. Its owner approves
-      or declines here or in Slack. A workspace credential needs no approval:
-      every session can use it. The secret is injected server-side, so the agent
-      never sees it, and every call is audited. A login is different: the agent
-      types its password into the sign-in page, so it can read it. Add only test
-      accounts as logins.
+      Sessions borrow credentials with your approval and never see the secret.
+      Logins are typed in by the agent, so add only test accounts.
     </SettingsHint>
   );
 
@@ -199,10 +195,7 @@ export function KeychainSection() {
       </Modal.Root>
 
       {data.credentials.length === 0 ? (
-        <EmptyState placement="card">
-          No credentials yet. Add one so sessions can request scoped access
-          without putting a token in a prompt.
-        </EmptyState>
+        <EmptyState placement="card">No credentials yet.</EmptyState>
       ) : (
         <SettingCard>
           {data.credentials.map((c) => (
@@ -361,11 +354,7 @@ export function KeychainSection() {
             ))}
           </SettingCard>
           <SettingsHint>
-            Allow once covers a single API call. Allow run covers one script, up
-            to its call cap, while it runs. The session never sees those
-            secrets, and you can revoke a grant below. Release password writes a
-            login's password to a file the session reads once, deleted after 30
-            minutes.
+            Allow once covers one call. Allow run covers one script.
           </SettingsHint>
         </>
       )}

@@ -155,7 +155,7 @@ export function StoragePanel() {
     <SettingsPanel>
       <SettingsHeader
         title="Storage"
-        description="Choose where session assets are kept."
+        description="Where session assets are kept."
       />
       <SettingsGroupLabel
         actions={
@@ -310,9 +310,7 @@ export function StoragePanel() {
         </SettingsForm>
       )}
       <SettingsHint>
-        S3-compatible mode works with AWS S3, Cloudflare R2, and compatible
-        services. New assets go directly to the bucket. Existing local assets
-        stay readable.
+        S3 works with AWS S3, Cloudflare R2 and compatible services.
       </SettingsHint>
     </SettingsPanel>
   );

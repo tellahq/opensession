@@ -55,9 +55,7 @@ describe("GitHub integration status", () => {
       />,
     );
     expect(markup).toContain("Automation off");
-    expect(markup).toContain(
-      "Respond to PR webhooks, mentions, labels, and review events.",
-    );
+    expect(markup).toContain("Reviews, mentions and labels on pull requests.");
     expect(markup).toContain(
       "GitHub App setup controls repository access. This switch only controls PR automation",
     );

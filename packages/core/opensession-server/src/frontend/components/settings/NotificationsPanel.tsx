@@ -69,10 +69,10 @@ function PushRow() {
       desc={
         error ||
         (state === "unsupported"
-          ? "Push needs an HTTPS origin. It isn't available on plain http."
+          ? "Needs HTTPS."
           : state === "denied"
-            ? "Notifications are blocked for this site. Allow them in your browser to enable push."
-            : "Alerts even when the app is closed. Turn it on separately on each device.")
+            ? "Blocked for this site. Allow it in your browser."
+            : "Alerts when the app is closed. Set per device.")
       }
       control={
         <Switch
@@ -88,34 +88,31 @@ function PushRow() {
 const ALERT_ROWS: {
   group: keyof NotificationAlerts;
   title: string;
-  desc: string;
+  desc?: string;
 }[] = [
   {
     group: "reviews",
     title: "Reviews",
-    desc: "Someone asks you for a review, or finishes one you asked for",
+    desc: "Requests for you, and reviews of your work.",
   },
   {
     group: "teamReviews",
     title: "Team review requests",
-    desc: "A team you're on is asked to review, like code owners",
+    desc: "Like code owners.",
   },
   {
     group: "mentions",
     title: "Mentions and comments",
-    desc: "Someone tags you, assigns you a comment, or replies to one you're in",
   },
   {
     group: "collaborators",
     title: "Added to a workspace",
-    desc: "Someone adds you as a collaborator",
   },
   {
     group: "huddles",
     title: "Huddle invites",
-    desc: "Someone invites you to a huddle",
   },
-  { group: "reminders", title: "Reminders", desc: "Desk task reminders" },
+  { group: "reminders", title: "Reminders", desc: "From Desk tasks." },
 ];
 
 export function NotificationsPanel() {
@@ -223,8 +220,7 @@ export function NotificationsPanel() {
         ))}
       </SettingCard>
       <SettingsHint className={alertError ? "text-red" : undefined}>
-        {alertError ||
-          "Everything still lands in your inbox. These choose what also sends a banner, a sound and a push, on every device."}
+        {alertError || "Everything still lands in your inbox."}
       </SettingsHint>
     </SettingsPanel>
   );

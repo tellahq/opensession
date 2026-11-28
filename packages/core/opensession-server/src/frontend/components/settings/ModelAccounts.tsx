@@ -28,7 +28,6 @@ import { Field, Input } from "../../ui/input";
 import { Menu } from "../../ui/menu";
 import { Modal } from "../../ui/modal";
 import { Select } from "../../ui/select";
-import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { Button } from "../../ui/button";
 import { DeviceCode } from "../../ui/device-code";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
@@ -1614,14 +1613,8 @@ function ProviderSummaryRow({
   );
 }
 
-/** Every subscription account in one provider-neutral list. Provider marks and
- * metadata preserve where each account comes from without splitting the pool
- * into separate cards.
- *
- * It opens collapsed — one row per provider with its account count — because
- * the full list is a page of usage meters and the question people arrive with
- * is "do we have capacity here". "All accounts" restores the flat list in
- * Settings; onboarding keeps the simpler provider summary. */
+/** Subscription accounts, one row per provider with its account count.
+ * A row opens to its accounts and their usage meters. */
 export function ProviderAccountsSection({
   onboarding = false,
   onChanged,
@@ -1633,7 +1626,6 @@ export function ProviderAccountsSection({
   const codex = useCodexAccounts();
   const xai = useXaiAccounts();
   const [adding, setAdding] = useState<"claude" | "codex" | "xai" | null>(null);
-  const [view, setView] = useState<"providers" | "accounts">("providers");
   const [expanded, setExpanded] = useState<"claude" | "codex" | "xai" | null>(
     null,
   );
@@ -1716,22 +1708,7 @@ export function ProviderAccountsSection({
           </>
         }
       >
-        <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          Subscriptions
-          {!onboarding && (
-            <Segmented
-              label="Account view"
-              size="sm"
-              value={view}
-              onValueChange={(next) => {
-                if (next === "providers" || next === "accounts") setView(next);
-              }}
-            >
-              <SegmentedOption value="providers">Providers</SegmentedOption>
-              <SegmentedOption value="accounts">All accounts</SegmentedOption>
-            </Segmented>
-          )}
-        </span>
+        Subscriptions
       </SettingsGroupLabel>
 
       {claude.error && (
@@ -1800,9 +1777,9 @@ export function ProviderAccountsSection({
           <EmptyState placement="row">
             {onboarding
               ? "Connect a Claude, OpenAI or xAI account to use its subscription."
-              : "No accounts yet. Runs use this server's Claude and Codex sign-ins until you add an Anthropic, OpenAI or xAI account."}
+              : "No accounts yet. Runs use this server's own sign-ins."}
           </EmptyState>
-        ) : view === "providers" ? (
+        ) : (
           <>
             <ProviderSummaryRow
               mark="claude"
@@ -1839,18 +1816,11 @@ export function ProviderAccountsSection({
               <XaiAccountRows state={xai} />
             </ProviderSummaryRow>
           </>
-        ) : (
-          <>
-            <ClaudeAccountRows state={claude} />
-            <CodexAccountRows state={codex} />
-            <XaiAccountRows state={xai} />
-          </>
         )}
       </SettingCard>
       <SettingsHint className={onboarding ? "mt-4 px-6" : undefined}>
-        Runs rotate through shared accounts for the selected model. Personal
-        accounts are used only for their owner's runs, and Automations accounts
-        only for automations.
+        Runs rotate through shared accounts. Personal accounts serve only their
+        owner.
       </SettingsHint>
     </>
   );

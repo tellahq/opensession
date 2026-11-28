@@ -117,21 +117,19 @@ export const TAB_SCROLL =
   "supports-[animation-timeline:scroll()]:data-[overflow]:[mask-image:linear-gradient(to_right,transparent_0,#000_var(--tabs-fade-start),#000_calc(100%_-_max(var(--tabs-fade-end),var(--tabs-control-fade-end,0px))),transparent_100%)]";
 
 /**
- * The new layout's strip (`layout.attached`). It sits in the grey window row
- * rather than in a band of its own, so it paints no fill and no closing rule:
- * the row has both. Every tab is a pill with room on all four sides, and the
- * pills centre on the row's line, where the traffic lights and the row's
- * icons sit. That line is the row's middle, or `--row-drop` below it in a
- * desktop shell that cannot move its lights (NEW_LAYOUT_PANE_ROW): 18px down
- * a 36px row, or 24px down a 44px one. The strip itself starts `--tab-top`
- * under the window's top edge.
+ * The new layout's strip (`layout.attached`). It sits in the pane's top row,
+ * inside the panel, rather than in a band of its own, so it paints no fill
+ * and no closing rule: the row has both. Every tab is a pill with room on all
+ * four sides, centred on the row's middle, the line of the sidebar's icons
+ * and the traffic lights (NEW_LAYOUT_PANE_ROW). The strip itself starts
+ * `--tab-top` under the row's top edge.
  *
  * No `session-tabs` hook: that name tells the top bar a strip overlaps its
  * lower edge, and this one is beside the bar, not under it.
  */
 export const TAB_STRIP_ATTACHED =
   "group/strip relative flex min-w-0 flex-1 items-stretch gap-0.5 " +
-  "[--tab-top:calc(2px+var(--row-drop,0px)/2)] pt-[var(--tab-top)]";
+  "[--tab-top:2px] pt-[var(--tab-top)]";
 
 /** Added to TAB_SCROLL: full height so the pills can centre on the row's
  *  line, and 6px at each end so the first pill clears the panel's left edge
@@ -141,8 +139,7 @@ export const TAB_SCROLL_ATTACHED = "items-stretch px-1.5";
 /** The "+" and history controls after the tabs: lifted off the row's bottom
  *  by the same inset, so they centre on the row's middle line with the tab
  *  labels rather than on the strip below the inset. */
-export const TAB_CONTROL_ATTACHED =
-  "mb-[calc(var(--tab-top)-var(--row-drop,0px))]";
+export const TAB_CONTROL_ATTACHED = "mb-[var(--tab-top)]";
 
 export const TAB_GROUP_ATTACHED =
   "relative inline-flex flex-none items-stretch gap-1";
@@ -223,16 +220,15 @@ export type TabState = {
 };
 
 /**
- * An attached tab: a 28px pill centred on the row's line, 4px clear of the
- * row above and below it in the browser's 36px row. In the desktop shell the
- * line is set by the traffic lights, so the pill has more room above it than
- * below until the lights move up. The open tab takes the sidebar's selected
+ * An attached tab: a 28px pill centred on the row, 4px clear of the panel's
+ * top and of the line under the row in the browser's 36px row, and 6px in
+ * the desktop shell's 40px one. The open tab takes the sidebar's selected
  * fill. The rest are words on the row until they are pointed at.
  */
 const TAB_ATTACHED_BASE =
   "relative inline-flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
   "rounded-tab [corner-shape:round] px-2.5 text-label shadow-none transition-[background-color,color] " +
-  "mt-[calc(var(--desktop-header-h)/2-16px)] mb-[calc(var(--desktop-header-h)/2-var(--row-drop,0px)/2-14px)] " +
+  "mt-[calc(var(--desktop-header-h)/2-16px)] mb-[calc(var(--desktop-header-h)/2-14px)] " +
   // Close sits as far in from the right edge as the label from the left.
   "[--tab-close-inset:6px]";
 

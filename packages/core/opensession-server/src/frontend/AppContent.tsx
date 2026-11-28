@@ -179,7 +179,6 @@ export function AppContent({
     leaveSettings,
     forceFirstMile,
     requireFirstMile,
-    openFirstMile,
     finishFirstMileNavigation,
     restoredSessionId,
     returnsToSession,
@@ -1307,7 +1306,6 @@ export function AppContent({
             {settingsActive && (
               <Settings
                 onBack={leaveSettings}
-                onOpenOnboarding={openFirstMile}
                 section={settingsSectionOf(route)}
                 onShowRoot={() => navigate({ view: "settings" })}
                 onSelect={(key) => navigate(settingsRoute(key))}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "../ui/button";
 import { SettingCard, SettingsHint, SettingsSection } from "../ui/settings";
 import { Switch } from "../ui/switch";
@@ -23,16 +23,13 @@ import {
 // has its own idea of what an integration card looks like.
 
 const INTEGRATION_DESCRIPTIONS = new Map([
-  ["plain", "Support threads, internal notes, and triage webhooks."],
-  ["linear", "Assigned issues become scoped coding sessions."],
-  ["slack", "DMs, mentions, session channels, and interactive controls."],
-  ["stripe", "Dispute webhooks routed into scoped automations."],
-  ["grafana", "Loki failure signatures routed into investigation automations."],
-  ["github", "Respond to PR webhooks, mentions, labels, and review events."],
-  [
-    "codestorage",
-    "Git hosting with branch-based reviews and local signing keys.",
-  ],
+  ["plain", "Support tickets and triage."],
+  ["linear", "Assigned issues become sessions."],
+  ["slack", "Talk to agents in Slack."],
+  ["stripe", "Disputes start automations."],
+  ["grafana", "Log failures start investigations."],
+  ["github", "Reviews, mentions and labels on pull requests."],
+  ["codestorage", "Git hosting with branch reviews."],
 ]);
 
 function IntegrationCard({
@@ -100,50 +97,43 @@ function IntegrationCard({
 
   return (
     <>
-      <SettingCard>
-        <div className="flex flex-wrap items-start gap-3 px-5 py-4">
-          <IconTile name={integration.id} size={40} />
-          <div className="min-w-[14rem] flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="text-item-title font-semibold text-fg">
-                {integration.label}
-              </div>
-              <StateChip tone={state.tone} label={stateLabel} />
+      <div className="flex flex-wrap items-start gap-3 px-5 py-3.5">
+        <IconTile name={integration.id} size={30} />
+        <div className="min-w-[14rem] flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-item-title font-semibold text-fg">
+              {integration.label}
             </div>
-            <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
-              {INTEGRATION_DESCRIPTIONS.get(integration.id) ??
-                `Connect ${integration.label} to Open Session.`}
-            </p>
-            {integration.enabled && integration.missingRequired.length > 0 && (
-              <div className="mt-2 text-meta text-yellow">
-                Missing {integration.missingRequired.join(", ")}
-              </div>
-            )}
+            <StateChip tone={state.tone} label={stateLabel} />
           </div>
-          <div className="ml-auto flex min-h-10 shrink-0 items-center gap-2">
-            {canToggle && (
-              <Switch
-                checked={integration.enabled}
-                onCheckedChange={(enabled) => void toggle(enabled)}
-                disabled={toggling}
-                aria-label={`${integration.enabled ? "Disable" : "Enable"} ${integration.label}${integration.id === "github" ? " automation" : ""}`}
-              />
-            )}
-            <Button
-              size="sm"
-              className="max-sm:min-h-10"
-              variant={
-                !hasCredentials && integration.env.length > 0
-                  ? "primary"
-                  : "default"
-              }
-              onClick={() => setSetupOpen(true)}
-            >
-              {hasCredentials || integration.enabled ? "Configure" : "Set up"}
-            </Button>
-          </div>
+          <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+            {INTEGRATION_DESCRIPTIONS.get(integration.id) ??
+              `Connect ${integration.label} to Open Session.`}
+          </p>
+          {integration.enabled && integration.missingRequired.length > 0 && (
+            <div className="mt-2 text-meta text-yellow">
+              Missing {integration.missingRequired.join(", ")}
+            </div>
+          )}
         </div>
-      </SettingCard>
+        <div className="ml-auto flex min-h-10 shrink-0 items-center gap-2">
+          {canToggle && (
+            <Switch
+              checked={integration.enabled}
+              onCheckedChange={(enabled) => void toggle(enabled)}
+              disabled={toggling}
+              aria-label={`${integration.enabled ? "Disable" : "Enable"} ${integration.label}${integration.id === "github" ? " automation" : ""}`}
+            />
+          )}
+          <Button
+            size="sm"
+            className="max-sm:min-h-10"
+            onClick={() => setSetupOpen(true)}
+          >
+            {hasCredentials || integration.enabled ? "Configure" : "Set up"}
+          </Button>
+        </div>
+      </div>
       <IntegrationSetupDialog
         integration={integration}
         open={setupOpen}
@@ -167,17 +157,20 @@ export function IntegrationsList({
   onSaved,
   github,
   onGithubSaved,
+  children,
 }: {
   integrations: SetupIntegration[];
   onSaved: (updated: SetupIntegration, restartRequired: boolean) => void;
   github?: SetupGithub;
   onGithubSaved?: (updated: SetupGithub, restartRequired: boolean) => void;
+  /** More rows at the end of the same card. */
+  children?: ReactNode;
 }) {
   const githubOnly =
     integrations.length === 1 && integrations[0]?.id === "github";
   return (
     <>
-      <div className="grid gap-3">
+      <SettingCard>
         {integrations.map((i) => (
           <IntegrationCard
             key={i.id}
@@ -187,11 +180,12 @@ export function IntegrationsList({
             onGithubSaved={onGithubSaved}
           />
         ))}
-      </div>
+        {children}
+      </SettingCard>
       <SettingsHint>
         {githubOnly
           ? "GitHub App setup controls repository access. This switch only controls PR automation, and changes apply after you restart."
-          : "Credentials stay on this server and are never shown again. Changes apply after you restart."}
+          : "Credentials stay on this server. Changes apply after a restart."}
       </SettingsHint>
     </>
   );

@@ -4,6 +4,7 @@ import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { availableHeldChats, type UnreadChat } from "../lib/unread-chats";
 import { LONG_PRESS_MS, LONG_PRESS_SLOP } from "../lib/sidebar-swipe";
 import { cn } from "../ui/cn";
+import { MOBILE_CONTROL_GLASS } from "../lib/app-header-classes";
 import { RepoTile } from "./RepoTile";
 import { Button } from "../ui/button";
 import { Popover } from "../ui/popover";
@@ -25,21 +26,30 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
   const navigating = useRef(false);
   const chats = availableHeldChats(held, unreadChats);
   const next = chats[0];
-  // Desktop: a glass pill of its own on the action row, the scroll arrow's
-  // material. Phone: the last segment of the glass action bar, so it takes
-  // the bar's 44px touch height and the bar supplies the glass.
+  // A glass pill of its own: the scroll arrow's material on desktop, the
+  // phone header controls' material (and 44px touch height) on a phone.
+  // The width cap sits on the pill, not the button inside it: a percentage cap
+  // on the button left the pill sized to the whole untruncated title, so a
+  // long name drew a wide empty capsule around truncated text.
   const surface = cn(
     "min-w-0 max-w-full justify-start text-left",
-    phone ? "h-11 min-h-11 px-3" : "max-w-[min(20rem,100%)]",
+    phone && "h-11 min-h-11 px-3.5",
   );
-  const glass = (control: React.ReactNode) =>
-    phone ? (
-      control
-    ) : (
-      <span className="inline-flex min-w-0 max-w-full rounded-full bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm">
-        {control}
-      </span>
-    );
+  const glass = (control: React.ReactNode) => (
+    <span
+      className={cn(
+        "inline-flex min-w-0 rounded-full",
+        phone
+          ? cn(
+              "max-w-full border border-[color:var(--mobile-header-control-border)] shadow-header-control",
+              MOBILE_CONTROL_GLASS,
+            )
+          : "max-w-[min(20rem,100%)] bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
+      )}
+    >
+      {control}
+    </span>
+  );
   const repo = (name: string) => (
     <span aria-hidden>
       <RepoTile name={name} size={phone ? 18 : 16} />

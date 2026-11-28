@@ -277,7 +277,6 @@ export function useSessionChromeController({
     overflow: {
       overflowOpen,
       setOverflowOpen,
-      ...overflowState.menu,
       ...overflowState.git,
       branchActionBusy,
       setBranchActionBusy,

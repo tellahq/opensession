@@ -1,3 +1,4 @@
+import { IntegrationsSection } from "./settings/IntegrationsSection";
 import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
 import React, {
   useCallback,
@@ -128,7 +129,7 @@ export function SectionHeading({
 function ConnectionsSkeleton() {
   return (
     <>
-      <SectionHeading>MCP servers: tools inside every session</SectionHeading>
+      <SectionHeading>MCP servers</SectionHeading>
       <SettingCardSkeleton rows={5} icon={40} label="Checking connections" />
     </>
   );
@@ -291,33 +292,8 @@ export function Connections() {
 
   return (
     <SettingsPanel>
-      <SettingsHeader
-        title="Connections"
-        actions={
-          <>
-            <Button
-              variant="soft"
-              icon={
-                <IconHistory
-                  size={20}
-                  className={refreshing ? "animate-spin" : ""}
-                />
-              }
-              onClick={() => load(true)}
-              disabled={refreshing}
-            >
-              {refreshing ? "Checking…" : "Re-check"}
-            </Button>
-            <Button
-              variant="primary"
-              icon={<IconPlus size={20} />}
-              onClick={() => setShowAdd(true)}
-            >
-              Add MCP server
-            </Button>
-          </>
-        }
-      />
+      <SettingsHeader title="Connections" />
+      <IntegrationsSection />
 
       {removeError && (
         <InlineAlert onDismiss={() => setRemoveError(null)}>
@@ -339,8 +315,34 @@ export function Connections() {
         <ConnectionsSkeleton />
       ) : (
         <>
-          <SectionHeading>
-            MCP servers: tools inside every session
+          <SectionHeading
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={
+                    <IconHistory
+                      size={20}
+                      className={refreshing ? "animate-spin" : ""}
+                    />
+                  }
+                  onClick={() => load(true)}
+                  disabled={refreshing}
+                >
+                  {refreshing ? "Checking…" : "Re-check"}
+                </Button>
+                <Button
+                  size="sm"
+                  icon={<IconPlus size={20} />}
+                  onClick={() => setShowAdd(true)}
+                >
+                  Add server
+                </Button>
+              </>
+            }
+          >
+            MCP servers
           </SectionHeading>
           <SettingCard>
             {data.mcpServers.map((s) => {
@@ -1433,18 +1435,27 @@ export function GithubAccounts({
                   ? `All sessions clone and open pull requests as @${account.login}.`
                   : data.connectAvailable
                     ? "Sign in so sessions can clone private repositories and open pull requests as you."
-                    : "Set up a GitHub App to access private repositories and open pull requests."}
+                    : "Set up a GitHub App to reach private repositories and open pull requests."}
               </SettingRowDescription>
             </SettingRowText>
             <SettingRowControl className="flex items-center gap-3">
-              <StatusChip
-                label={connected ? "Connected" : "Not connected"}
-                dot={
-                  connected
-                    ? "var(--green)"
-                    : "var(--line-strong, var(--text-faint))"
-                }
-              />
+              {connected || data.connectAvailable ? (
+                <StatusChip
+                  label={connected ? "Connected" : "Not connected"}
+                  dot={
+                    connected
+                      ? "var(--green)"
+                      : "var(--line-strong, var(--text-faint))"
+                  }
+                />
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => void load().then(() => setWizardOpen(true))}
+                >
+                  Set up
+                </Button>
+              )}
               {connected && (
                 <Menu.Root>
                   <Menu.Trigger
@@ -1483,89 +1494,58 @@ export function GithubAccounts({
               set by the wizard or an env var); before that the setup wizard is
               the entry point. */}
           {!connected &&
-            (data.connectAvailable ? (
-              flowState !== "waiting" && (
-                <div className="flex flex-col gap-2.5 px-5 py-3.5">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <Button
-                      variant="primary"
-                      onClick={onConnectRequest ?? startConnect}
-                      disabled={flowState !== "idle"}
-                    >
-                      {flowState === "starting"
-                        ? "Starting…"
-                        : "Sign in with GitHub"}
-                    </Button>
-                    {data.appInstallUrl && (
+            (data.connectAvailable
+              ? flowState !== "waiting" && (
+                  <div className="flex flex-col gap-2.5 px-5 py-3.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
                       <Button
-                        size="sm"
-                        variant="ghost"
-                        icon={<IconArrowUpRight size={20} />}
-                        render={
-                          <a
-                            href={data.appInstallUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          />
-                        }
+                        variant="primary"
+                        onClick={onConnectRequest ?? startConnect}
+                        disabled={flowState !== "idle"}
                       >
-                        Manage repositories
+                        {flowState === "starting"
+                          ? "Starting…"
+                          : "Sign in with GitHub"}
                       </Button>
+                      {data.appInstallUrl && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={<IconArrowUpRight size={20} />}
+                          render={
+                            <a
+                              href={data.appInstallUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            />
+                          }
+                        >
+                          Manage repositories
+                        </Button>
+                      )}
+                    </div>
+                    {/* A config-set app can be cleared live; an env-set one only
+                        gets named, since it needs a restart to change. */}
+                    {data.appConfigSource === "config" ? (
+                      <button
+                        type="button"
+                        className="self-start text-meta text-dim underline hover:text-fg"
+                        onClick={removeApp}
+                      >
+                        Remove app
+                      </button>
+                    ) : (
+                      <div className="text-meta leading-snug text-faint">
+                        Set via{" "}
+                        <code className="rounded-sm bg-surface px-1 py-0.5 font-mono text-[0.92em] text-dim">
+                          OPENSESSION_GITHUB_CLIENT_ID
+                        </code>
+                        . Unset and restart to change.
+                      </div>
                     )}
                   </div>
-                  <div className="text-meta leading-snug text-faint">
-                    GitHub opens in a new tab. Authorize with the one-time code,
-                    then close that tab and return here. Every session shares
-                    the connected account.
-                  </div>
-                  {/* A config-set app can be cleared live; an env-set one only
-                        gets named, since it needs a restart to change. */}
-                  {data.appConfigSource === "config" ? (
-                    <button
-                      type="button"
-                      className="self-start text-meta text-dim underline hover:text-fg"
-                      onClick={removeApp}
-                    >
-                      Remove app
-                    </button>
-                  ) : (
-                    <div className="text-meta leading-snug text-faint">
-                      Set via{" "}
-                      <code className="rounded-sm bg-surface px-1 py-0.5 font-mono text-[0.92em] text-dim">
-                        OPENSESSION_GITHUB_CLIENT_ID
-                      </code>
-                      . Unset and restart to change.
-                    </div>
-                  )}
-                </div>
-              )
-            ) : (
-              <div className="flex flex-col gap-4 px-5 py-3.5">
-                <div className="text-meta leading-snug text-faint">
-                  No sign-in here, so every session shares one GitHub account.
-                  Turn on GitHub sign-in for per-person accounts.
-                </div>
-                <div className="flex flex-col gap-2">
-                  <div className="text-label font-medium text-fg">
-                    GitHub App
-                  </div>
-                  <div className="text-meta leading-snug text-faint">
-                    Install your own app on the repos you choose, then authorize
-                    with a one-time code.
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <Button
-                      variant="primary"
-                      onClick={() =>
-                        void load().then(() => setWizardOpen(true))
-                      }
-                    >
-                      Set up GitHub App
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
+                )
+              : null)}
 
           {deviceFlowWell}
 
@@ -1580,7 +1560,7 @@ export function GithubAccounts({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-meta text-dim underline hover:text-fg"
               >
-                Manage which repositories the app can access
+                Choose repositories
                 <IconArrowUpRight size={20} />
               </a>
             </div>

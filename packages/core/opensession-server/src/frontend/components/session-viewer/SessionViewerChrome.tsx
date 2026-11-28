@@ -147,7 +147,6 @@ interface ChromeLayout {
   headerActionsEl: HTMLElement | null | undefined;
   headerRepoEl: HTMLElement | null | undefined;
   headerModelEl: HTMLElement | null | undefined;
-  mobileActionMenuEl: HTMLDivElement | null;
   headerRef: RefObject<HTMLDivElement | null>;
   headerActionsRef: RefObject<HTMLDivElement | null>;
   panelAvailable: boolean;
@@ -357,7 +356,6 @@ export function SessionViewerChrome({
     headerActionsEl,
     headerRepoEl,
     headerModelEl,
-    mobileActionMenuEl,
     headerRef,
     headerActionsRef,
     panelAvailable,
@@ -967,7 +965,7 @@ export function SessionViewerChrome({
                       <button type="button" className={TAB_MENU_CONTROL}>
                         <IconDotsHorizontal size={20} aria-hidden="true" />
                       </button>
-                    ) : infoPageOpen ? (
+                    ) : infoPageOpen || isPhone ? (
                       <TopBarAction
                         floating
                         icon={<IconDotsHorizontal size={22} />}
@@ -981,10 +979,10 @@ export function SessionViewerChrome({
                     )
                   }
                   className={cn(
-                    !menuInTab && !infoPageOpen && "rounded-control",
-                    !infoPageOpen &&
-                      isPhone &&
-                      "size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
+                    !menuInTab &&
+                      !infoPageOpen &&
+                      !isPhone &&
+                      "rounded-control",
                     !menuInTab && overflowOpen && "bg-hover text-fg",
                   )}
                   title="More actions"
@@ -1045,7 +1043,7 @@ export function SessionViewerChrome({
                     </>
                   ) : (
                     <>
-                      {(!isPhone || session.archived) && archiveAction}
+                      {archiveAction}
                       {deleteAction}
                     </>
                   )}
@@ -1131,11 +1129,9 @@ export function SessionViewerChrome({
 					    the Workspace toggle stays rightmost. On phones the secondary
 					    controls fold in too. */}
                   {!compactHeader && !isPhone && shareAction(false)}
-                  {/* Phones portal this menu into the action bar above the composer. */}
-                  {isPhone &&
-                    !infoPageOpen &&
-                    mobileActionMenuEl &&
-                    createPortal(overflowMenu, mobileActionMenuEl)}
+                  {/* Phones keep this menu in the top bar's right slot, as the
+					    native app does; Archive rides inside it. */}
+                  {isPhone && !infoPageOpen && overflowMenu}
                   {/* Code-workspace testing affordances dock immediately left of the
 					    side-panel toggle. The local preview launcher lives in the ⋯ menu;
 					    the globe rides here only while nothing else is showing it. The

@@ -200,7 +200,7 @@ export function TeamSection({
             <EmptyState placement="row">
               {githubAuth
                 ? "No teammates yet. Share the invite link so they can sign in with GitHub."
-                : "No teammates yet. Add everyone who uses this instance so commits and sessions attribute to real people."}
+                : "No teammates yet."}
             </EmptyState>
           ) : (
             members.map((m) => (
@@ -220,10 +220,10 @@ export function TeamSection({
       )}
       <SettingsHint>
         {githubAuth
-          ? "Anyone who can reach this server can join by signing in with GitHub. Every member can manage the workspace."
+          ? "Anyone with GitHub who can reach this server can join, and every member can manage the workspace."
           : githubOrganization
-            ? `Members were imported from the ${githubOrganization} GitHub organization. Only a name is required when you add someone manually.`
-            : "Only a name is required. Add a GitHub login or other identities when sign-in and attribution should resolve to this member."}
+            ? `Imported from the ${githubOrganization} GitHub organization.`
+            : "Only a name is required."}
       </SettingsHint>
       <MemberDialog
         open={dialogOpen}

@@ -68,7 +68,7 @@ export function SandboxSleepSettings() {
       <SettingCard>
         <SettingRow
           title="Agent idle sleep"
-          desc="Wait this long after the agent finishes work before a Sandbox can sleep."
+          desc="After the agent finishes."
           control={
             <div
               className={
@@ -91,7 +91,7 @@ export function SandboxSleepSettings() {
         />
         <SettingRow
           title="Human idle sleep"
-          desc="Keep a Sandbox awake this long after a prompt, Portal visit, Terminal, or Desktop session."
+          desc="After your last prompt, Portal, Terminal or Desktop use."
           control={
             <div
               className={
@@ -116,8 +116,8 @@ export function SandboxSleepSettings() {
           title="Resume script"
           desc={
             settings.workspaceResumeScript
-              ? "Runs in every Linux Sandbox before .agents/resume, when it starts and each time it wakes."
-              : "Optional. A fix every Sandbox needs that repositories cannot deliver."
+              ? "Runs in every Linux Sandbox on start and wake."
+              : "Optional. Runs in every Linux Sandbox on start and wake."
           }
           control={
             <Button size="sm" onClick={() => setEditing(true)}>
@@ -127,7 +127,7 @@ export function SandboxSleepSettings() {
         />
         <SettingRow
           title="Sandbox agent"
-          desc="Sandboxes run a small agent that connects out to this server, so commands skip the provider's API. The provider's own connection takes over whenever the agent is not connected."
+          desc="Runs commands without the provider's API."
           control={
             <span className="text-supporting text-faint">
               {agentProviders.length ? agentProviders.join(", ") : "Off"}
@@ -136,16 +136,13 @@ export function SandboxSleepSettings() {
         />
       </SettingCard>
       <SettingsHint>
-        Asleep, a Sandbox keeps its files but not its running processes, so dev
-        servers, Terminal shells and Desktop apps start again when it wakes. A
-        wake waits up to 10 seconds for .agents/resume, then lets it finish in
-        the background.
+        Asleep, a Sandbox keeps its files but stops its processes.
       </SettingsHint>
       <SandboxScriptDialog
         open={editing}
         onOpenChange={setEditing}
         title="Workspace resume script"
-        description="Runs with Bash as the Sandbox user right before .agents/resume, in every Linux Sandbox of every project. Keep it fast and safe to run again."
+        description="Runs before .agents/resume in every Linux Sandbox. Keep it fast."
         value={settings.workspaceResumeScript}
         placeholder={"#!/usr/bin/env bash\nset -euo pipefail"}
         onSave={async (script) => {

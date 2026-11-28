@@ -8,13 +8,11 @@ import {
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import {
-  SettingCard,
-  SettingCardSkeleton,
   SettingsField,
   SettingsSection,
   settingsInputClass,
 } from "../ui/settings";
-import { InlineAlert } from "../ui/state";
+import { InlineAlert, LoadingState } from "../ui/state";
 import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
 import { IconTile } from "./BrandTile";
@@ -326,7 +324,7 @@ export function AppleMobileIntegration({ teamNames }: { teamNames: string[] }) {
     return failed ? (
       <InlineAlert>Couldn&rsquo;t load Apple mobile setup.</InlineAlert>
     ) : (
-      <SettingCardSkeleton rows={1} icon={40} label="Loading Apple mobile" />
+      <LoadingState placement="row">Loading Apple mobile…</LoadingState>
     );
   }
 
@@ -343,31 +341,23 @@ export function AppleMobileIntegration({ teamNames }: { teamNames: string[] }) {
 
   return (
     <>
-      <SettingCard>
-        <div className="flex flex-wrap items-start gap-3 px-5 py-4">
-          <IconTile name="apple-mobile" size={40} />
-          <div className="min-w-[14rem] flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="text-item-title font-semibold text-fg">
-                Apple mobile
-              </div>
-              <StateChip tone={tone} label={label} />
+      <div className="flex flex-wrap items-start gap-3 px-5 py-3.5">
+        <IconTile name="apple-mobile" size={30} />
+        <div className="min-w-[14rem] flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-item-title font-semibold text-fg">
+              Apple mobile
             </div>
-            <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
-              SwiftPM and xtool development builds with restricted Xcode
-              releases.
-            </p>
+            <StateChip tone={tone} label={label} />
           </div>
-          <Button
-            size="sm"
-            className="ml-auto"
-            variant={tone === "off" ? "primary" : "default"}
-            onClick={() => setOpen(true)}
-          >
-            {tone === "off" ? "Set up" : "Configure"}
-          </Button>
+          <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+            iOS builds and TestFlight releases.
+          </p>
         </div>
-      </SettingCard>
+        <Button size="sm" className="ml-auto" onClick={() => setOpen(true)}>
+          {tone === "off" ? "Set up" : "Configure"}
+        </Button>
+      </div>
       <AppleMobileSetupDialog
         open={open}
         status={status}

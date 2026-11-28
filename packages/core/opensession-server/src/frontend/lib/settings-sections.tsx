@@ -4,11 +4,9 @@ import {
   IconArchive,
   IconBandAid,
   IconBell,
-  IconBolt,
   IconBook,
   IconBox,
   IconBranches,
-  IconChecklist,
   IconClock,
   IconConnections,
   IconDatabase,
@@ -17,7 +15,6 @@ import {
   IconGlobe,
   IconKeyboard,
   IconPeople,
-  IconPlug,
   IconRocket,
   IconServer,
   IconShieldCheck,
@@ -49,13 +46,10 @@ export type SettingsSectionKey =
   | "repos"
   | "providers"
   | "connections"
-  | "integrations"
   | "library"
   | "memory"
-  | "setup"
   | "sandboxes"
   | "runners"
-  | "prewarming"
   | "ingress"
   | "storage"
   | "deploys"
@@ -135,12 +129,6 @@ export const SECTIONS: SettingsSection[] = [
     icon: <IconConnections />,
   },
   {
-    key: "integrations",
-    label: "Integrations",
-    group: "Organization",
-    icon: <IconPlug />,
-  },
-  {
     key: "library",
     label: "Library",
     group: "Organization",
@@ -153,12 +141,6 @@ export const SECTIONS: SettingsSection[] = [
     icon: <IconDatabase />,
   },
   {
-    key: "setup",
-    label: "Setup",
-    group: "Organization",
-    icon: <IconChecklist />,
-  },
-  {
     key: "sandboxes",
     label: "Sandboxes",
     group: "Infrastructure",
@@ -169,12 +151,6 @@ export const SECTIONS: SettingsSection[] = [
     label: "Runners",
     group: "Infrastructure",
     icon: <IconServer />,
-  },
-  {
-    key: "prewarming",
-    label: "Acceleration",
-    group: "Infrastructure",
-    icon: <IconBolt />,
   },
   {
     key: "ingress",

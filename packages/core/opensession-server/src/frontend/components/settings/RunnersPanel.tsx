@@ -204,7 +204,7 @@ export function RunnersPanel() {
     <SettingsPanel>
       <SettingsHeader
         title="Runners"
-        description="Computers your workspace explicitly trusts for work that needs their hardware or platform. They are not isolated Sandboxes."
+        description="Trusted computers for work that needs their hardware."
         actions={
           <Button
             variant="primary"
@@ -376,10 +376,6 @@ export function RunnersPanel() {
           ))}
         </div>
       )}
-      <SettingsHint>
-        SSH and Kubernetes bootstrap remain operator-managed migration paths.
-        They never give agents direct SSH or kubectl access.
-      </SettingsHint>
     </SettingsPanel>
   );
 }
