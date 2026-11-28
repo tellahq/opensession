@@ -862,7 +862,7 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
                     </Menu.Item>
                     <Menu.Item
                       onClick={() => state.remove(account)}
-                      className="text-red data-[highlighted]:bg-red-soft"
+                      tone="danger"
                     >
                       <IconTrash size={20} />
                       Remove account
@@ -1231,7 +1231,7 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
                   </Menu.Item>
                   <Menu.Item
                     onClick={() => state.remove(account)}
-                    className="text-red data-[highlighted]:bg-red-soft"
+                    tone="danger"
                   >
                     <IconTrash size={20} />
                     Remove account
@@ -1537,7 +1537,7 @@ function XaiAccountRows({ state }: { state: XaiAccountsState }) {
                   </Menu.Item>
                   <Menu.Item
                     onClick={() => state.remove(account)}
-                    className="text-red data-[highlighted]:bg-red-soft"
+                    tone="danger"
                   >
                     <IconTrash size={20} />
                     Remove account

@@ -344,7 +344,7 @@ export function Feed({
           </Button>
         }
       />
-      <Menu.Popup align={align} className="min-w-[200px]">
+      <Menu.Popup align={align}>
         <Menu.RadioGroup
           value={repo}
           onValueChange={(value) => setRepo(String(value))}

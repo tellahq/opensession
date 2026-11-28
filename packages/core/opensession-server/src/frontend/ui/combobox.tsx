@@ -194,7 +194,7 @@ function Item({ className, children, ...props }: ItemProps) {
   return (
     <BaseCombobox.Item
       {...props}
-      {...sx([popup.item, popup.selectItem, popup.touchRow], className)}
+      {...sx([popup.item, popup.selectItem], className)}
     >
       <span {...stylex.props(popup.truncate)}>{children}</span>
       {/* The tick's column is reserved on every row, as in `ui/select`, so

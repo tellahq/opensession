@@ -58,7 +58,10 @@ export const popup = stylex.create({
   /** The scroller inside the surface: a long list scrolls, the padding stays.
    *  `pan-y` keeps nested rows from claiming an iOS swipe as a press. */
   scroll: {
-    maxHeight: geometry.popupMaxHeight,
+    maxHeight: {
+      default: geometry.popupMaxHeight,
+      [media.phone]: geometry.popupMaxHeightPhone,
+    },
     touchAction: "pan-y",
     overflowY: "auto",
     overflowX: "hidden",
@@ -70,20 +73,33 @@ export const popup = stylex.create({
   item: {
     display: "flex",
     width: "100%",
-    cursor: "pointer",
+    cursor: { default: "pointer", ":is([data-disabled])": "default" },
     userSelect: "none",
     alignItems: "center",
     gap: space.s8,
-    borderRadius: radius.md,
+    borderRadius: radius.popupRow,
     ["cornerShape"]: corner.squircle,
     paddingInline: space.s8,
     paddingBlock: space.s6,
+    // A finger's row on a phone, the way the platform's own menus size it.
+    minHeight: { default: null, [media.phone]: controlHeight.touch },
     textAlign: "left",
     fontSize: text.label,
     color: color.fg,
     textDecoration: "none",
     outline: "none",
     backgroundColor: { default: null, ":is([data-highlighted])": color.hover },
+    // A row that cannot act stays in place, quieter, rather than vanishing.
+    opacity: { default: null, ":is([data-disabled])": opacity.disabled },
+  },
+  /** A destructive row: red ink, and a red wash when lit, so the row reads
+   *  as a warning before the press rather than after it. */
+  itemDanger: {
+    color: color.red,
+    backgroundColor: {
+      default: null,
+      ":is([data-highlighted])": color.redSoft,
+    },
   },
   /** A submenu trigger stays lit while its submenu is open. */
   itemOpen: {
@@ -92,10 +108,6 @@ export const popup = stylex.create({
       ":is([data-highlighted])": color.hover,
       ":is([data-popup-open])": color.hover,
     },
-  },
-  /** A finger's row on a phone; the desktop row stays the menu's. */
-  touchRow: {
-    minHeight: { default: null, [media.phone]: controlHeight.touch },
   },
   /** A combobox's popup: wider than its trigger, search on top. */
   searchSurface: {
@@ -158,8 +170,10 @@ export const popup = stylex.create({
   asideList: { minWidth: 0, flex: "1" },
   /** A select's popup: never narrower than its trigger. */
   anchorWidth: { minWidth: geometry.anchorWidth },
+  /** Inset to the rows' own edges, so it splits groups without cutting the
+   *  popup in two. */
   separator: {
-    marginInline: `calc(-1 * ${space.s6})`,
+    marginInline: space.s8,
     marginBlock: space.s6,
     height: geometry.hairline,
     backgroundColor: color.line,
@@ -188,8 +202,6 @@ export const popup = stylex.create({
   selectItem: {
     justifyContent: "space-between",
     gap: space.s12,
-    cursor: { default: "pointer", ":is([data-disabled])": "default" },
-    opacity: { default: null, ":is([data-disabled])": opacity.disabled },
   },
   itemLead: {
     display: "flex",

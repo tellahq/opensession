@@ -185,7 +185,7 @@ function ConversationRow({
             <span className="grow">Move to section</span>
             {SUB_ARROW}
           </ContextMenu.SubmenuTrigger>
-          <Menu.Popup className="min-w-[180px]">
+          <Menu.Popup>
             {targets.map((section) => (
               <Menu.Item
                 key={section.id}
@@ -331,10 +331,7 @@ function Group({
           {section && (
             <>
               <ContextMenu.Separator />
-              <ContextMenu.Item
-                onClick={() => onDelete(section)}
-                className="text-red data-[highlighted]:bg-red-soft"
-              >
+              <ContextMenu.Item onClick={() => onDelete(section)} tone="danger">
                 <IconTrash size={20} className="text-red" />
                 <span className="grow">Delete section</span>
               </ContextMenu.Item>

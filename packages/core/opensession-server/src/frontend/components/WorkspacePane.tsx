@@ -769,7 +769,7 @@ export function WorkspacePane({
           )}
           {onDeleteWorkspace && (
             <Menu.Item
-              className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+              tone="danger"
               onClick={() =>
                 confirm({
                   title: `Delete workspace "${workspace.name}"?`,

@@ -414,7 +414,7 @@ export function PlainThreadActions({
               </Button>
             }
           />
-          <Menu.Popup align="start" className="min-w-[200px]">
+          <Menu.Popup align="start">
             <PlainStatusItems status={status} onPick={setStatus} />
           </Menu.Popup>
         </Menu.Root>

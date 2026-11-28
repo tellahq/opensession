@@ -124,19 +124,18 @@
   /* Glass. The same fill, thinned so the page shows through, over a blur
 	   heavy enough that what shows through is colour and shape rather than
 	   somebody else's sentence — a popup you can read a row title through is
-	   not translucent, it is broken. Written once here rather than per theme:
-	   --popup-surface re-resolves under html[data-theme], so the mix follows.
-	   Both are overridden back to opaque at the bottom of this block's file
-	   for browsers without backdrop-filter and for reduced transparency. */
-  --popup-glass: color-mix(in srgb, var(--popup-surface) 72%, transparent);
+	   not translucent, it is broken. At 72% a menu over the sidebar still let
+	   its larger row titles read through, so 88% it is. Written once here
+	   rather than per theme: --popup-surface re-resolves under
+	   html[data-theme], so the mix follows. Both are overridden back to opaque
+	   at the bottom of this block's file for browsers without backdrop-filter
+	   and for reduced transparency. */
+  --popup-glass: color-mix(in srgb, var(--popup-surface) 88%, transparent);
   --popup-blur: blur(20px) saturate(1.8);
-  /* The command palette's own glass. Denser than a menu's for two reasons: it
-	   is a big empty box rather than a strip of rows — the same reason
-	   --composer-surface and --popup-surface go white in light instead of
-	   following the ramp down — and it is the one popup with a dimming backdrop
-	   underneath, which composites THROUGH the fill and drags a 72% mix down to
-	   a grey slab. At 88% the page's colour and shape still read through it and
-	   the surface stays paper. */
+  /* The command palette's own glass, kept as its own token: it is the one
+	   popup with a dimming backdrop underneath, which composites THROUGH the
+	   fill, so any thinner mix drags it down to a grey slab. At 88% the page's
+	   colour and shape still read through it and the surface stays paper. */
   --palette-glass: color-mix(in srgb, var(--popup-surface) 88%, transparent);
   /* The composer's own fill + edge. In dark it IS --control-surface: lighter
 	   than the page, so the box already reads as lifted. Light needs its own

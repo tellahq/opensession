@@ -1301,7 +1301,7 @@ export function PrStatusBar({
         const forceItem = (
           <Menu.Item
             onClick={() => handleForceMerge(choices.bypasses)}
-            className="text-red data-[highlighted]:bg-red-soft"
+            tone="danger"
           >
             <IconWarningTriangle size={20} className="text-red" />
             <span className="min-w-0 flex-1 truncate">
@@ -1325,7 +1325,7 @@ export function PrStatusBar({
                 Merge
                 <IconChevronDown size={20} className="-mr-0.5 opacity-60" />
               </Menu.Trigger>
-              <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+              <Menu.Popup align="end" sideOffset={6}>
                 {forceItem}
               </Menu.Popup>
             </Menu.Root>
@@ -1361,11 +1361,7 @@ export function PrStatusBar({
                     />
                   }
                 />
-                <Menu.Popup
-                  align="end"
-                  sideOffset={6}
-                  className="min-w-[200px]"
-                >
+                <Menu.Popup align="end" sideOffset={6}>
                   {forceItem}
                 </Menu.Popup>
               </Menu.Root>

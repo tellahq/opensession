@@ -1987,7 +1987,7 @@ export function PrPanel({
             )}
             {!mergeScheduled && choices.all.includes("force") && (
               <Menu.Item
-                className="text-red data-[highlighted]:bg-red-soft"
+                tone="danger"
                 onClick={() => chooseMerge("force")}
                 disabled={merging}
               >
@@ -1996,7 +1996,7 @@ export function PrPanel({
               </Menu.Item>
             )}
             <Menu.Item
-              className="text-red data-[highlighted]:bg-red-soft"
+              tone="danger"
               onClick={handleClose}
               closeOnClick={confirmClose}
               disabled={closing}

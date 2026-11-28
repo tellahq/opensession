@@ -590,10 +590,7 @@ export function SessionTabs({
                       )}
                     </ContextMenu.Trigger>
                     {onMoveToPanel && (
-                      <ContextMenu.Popup
-                        className="min-w-[220px]"
-                        finalFocus={false}
-                      >
+                      <ContextMenu.Popup finalFocus={false}>
                         <ContextMenu.Item onClick={() => onMoveToPanel(v.id)}>
                           <IconSidebarRight size={20} className={MENU_ICON} />
                           <span className="grow">Move to side panel</span>
@@ -903,7 +900,7 @@ export function SessionTabs({
                     </ContextMenu.Item>
                     {onDelete && (
                       <ContextMenu.Item
-                        className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+                        tone="danger"
                         onClick={() => setDeleteTarget(session)}
                       >
                         <IconTrash size={20} />

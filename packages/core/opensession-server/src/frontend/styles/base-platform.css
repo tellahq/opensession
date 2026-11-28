@@ -148,6 +148,10 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
   html.material-backdrop {
     --sidebar-material: color-mix(in srgb, var(--sidebar-bg) 88%, transparent);
     --sidebar-material-sheen: transparent;
+    /* Menus are solid paper here. Over the transparent window the page's
+		   backdrop-filter does not blur, so a thinned fill showed the sidebar's
+		   row titles sharp through every menu. */
+    --popup-glass: var(--popup-surface);
   }
 }
 /* A pinned sidebar heading has no fill, so what scrolls up under it is cut

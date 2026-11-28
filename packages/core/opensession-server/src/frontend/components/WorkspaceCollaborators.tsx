@@ -177,7 +177,7 @@ export function WorkspaceCollaborators({
               {collaborators.length ? "Change" : "Add"}
               <IconChevronDown size={20} className={GIT_ACTION_CARET} />
             </Menu.Trigger>
-            <Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
+            <Menu.Popup align="start" sideOffset={6}>
               <CollaboratorMenuItems {...state} />
             </Menu.Popup>
           </Menu.Root>
@@ -210,7 +210,7 @@ export function CollaboratorsSubmenu({
         <span className="grow">Collaborators</span>
         <IconChevronRight size={20} className="text-faint" />
       </Menu.SubmenuTrigger>
-      <Menu.Popup className="min-w-[200px]">
+      <Menu.Popup>
         <CollaboratorMenuItems {...state} />
       </Menu.Popup>
     </Menu.SubmenuRoot>

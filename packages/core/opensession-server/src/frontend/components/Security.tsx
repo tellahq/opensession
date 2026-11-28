@@ -251,7 +251,7 @@ export function Security({ onOpenSession }: Props) {
                         </Menu.Item>
                         <Menu.Item
                           onClick={() => handleDeleteProfile(p)}
-                          className="text-red data-[highlighted]:bg-red-soft"
+                          tone="danger"
                         >
                           <IconTrash size={20} />
                           Delete profile
@@ -400,7 +400,7 @@ export function Security({ onOpenSession }: Props) {
                         <Menu.Popup align="end" sideOffset={4}>
                           <Menu.Item
                             onClick={() => handleDeleteScan(s)}
-                            className="text-red data-[highlighted]:bg-red-soft"
+                            tone="danger"
                           >
                             <IconTrash size={20} />
                             Remove scan

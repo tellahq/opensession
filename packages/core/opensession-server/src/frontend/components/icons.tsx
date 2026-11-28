@@ -933,6 +933,21 @@ export function IconUser(p: IconProps) {
   );
 }
 
+// IconUser with a plus beside it: add a person (invite a member).
+export function IconUserPlus(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="10" cy="8" r="3.25" />
+      <path
+        {...stroke}
+        d="M4.75 19.25C4.75 16.35 7.1 14.25 10 14.25C10.9 14.25 11.75 14.45 12.5 14.8"
+      />
+      <path {...stroke} d="M18 13.75V19.25" />
+      <path {...stroke} d="M20.75 16.5H15.25" />
+    </Svg>
+  );
+}
+
 export function IconBadge(p: IconProps) {
   return (
     <Svg {...p}>

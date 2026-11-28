@@ -295,7 +295,7 @@ export function Minibar({
                 }
               />
             </Tooltip>
-            <Menu.Popup side="right" align="start" className="min-w-[220px]">
+            <Menu.Popup side="right" align="start">
               {inMore.map((item) => (
                 <Menu.Item key={item.id} onClick={() => open(item)}>
                   <span className={MENU_ICON_SLOT}>
@@ -311,7 +311,7 @@ export function Minibar({
                   <span className="grow">Show in minibar</span>
                   <IconChevronRight size={20} className="text-faint" />
                 </Menu.SubmenuTrigger>
-                <Menu.Popup className="min-w-[220px]">
+                <Menu.Popup>
                   <MinibarItemToggles items={items} shown={shown} />
                 </Menu.Popup>
               </Menu.SubmenuRoot>
@@ -332,7 +332,7 @@ export function Minibar({
           />
         </Tooltip>
       </ContextMenu.Trigger>
-      <ContextMenu.Popup className="min-w-[220px]">
+      <ContextMenu.Popup>
         <MinibarItemToggles items={items} shown={shown} />
       </ContextMenu.Popup>
     </ContextMenu.Root>

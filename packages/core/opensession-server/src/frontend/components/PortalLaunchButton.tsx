@@ -140,7 +140,7 @@ export function PortalLaunchButton({
       <Menu.Popup
         align="end"
         sideOffset={6}
-        className="min-w-[220px] max-w-[min(300px,calc(100vw-24px))]"
+        className="max-w-[min(300px,calc(100vw-24px))]"
       >
         {portals.map((portal) => (
           <Menu.Item

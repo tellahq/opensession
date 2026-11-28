@@ -96,12 +96,7 @@ export function SettingsAccountFooter() {
             <IconChevronRight size={20} className="shrink-0 text-faint" />
           </Menu.Trigger>
           {/* The trigger sits at the very bottom — open upward. */}
-          <Menu.Popup
-            side="top"
-            align="start"
-            sideOffset={8}
-            className="min-w-[200px]"
-          >
+          <Menu.Popup side="top" align="start" sideOffset={8}>
             <Menu.RadioGroup
               value={currentUser}
               onValueChange={(value) => setCurrentUser(String(value))}

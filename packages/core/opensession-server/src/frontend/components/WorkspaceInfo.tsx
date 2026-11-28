@@ -1221,7 +1221,7 @@ function ReviewerChip({
               </>
             )}
           </Menu.Trigger>
-          <Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
+          <Menu.Popup align="start" sideOffset={6}>
             {req &&
               (accepted ? (
                 <Menu.Item

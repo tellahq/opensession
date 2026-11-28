@@ -19,6 +19,7 @@ import {
   IconPeople,
   IconPlus,
   IconServer,
+  IconUserPlus,
 } from "./icons";
 import { OrganizationAppIcon } from "./OrganizationAppIcon";
 import {
@@ -78,7 +79,6 @@ export function OrganizationSwitcher({
   }
 
   const subtitle = `${status}${memberCount === null ? "" : ` · ${memberCount} ${memberCount === 1 ? "member" : "members"}`}`;
-  const itemClass = "phone:min-h-11";
   const organizationUrl = `${window.location.origin}${BASE_PATH}/`;
 
   // A shell with `remove` gets the in-app dialog; older shells still open
@@ -171,7 +171,7 @@ export function OrganizationSwitcher({
           sideOffset={5}
           className="w-[290px] max-w-[calc(100vw-16px)]"
         >
-          <div className="flex items-center gap-3 px-2 py-2">
+          <div className="flex items-center gap-3 px-2 pt-1.5 pb-2">
             <span className="relative inline-flex size-9 shrink-0 items-center justify-center">
               <OrganizationAppIcon className="size-9 rounded-md object-cover" />
               <span
@@ -183,7 +183,7 @@ export function OrganizationSwitcher({
               />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-body font-semibold text-fg">
+              <span className="block truncate text-item-title font-semibold text-fg">
                 {name}
               </span>
               <span className="block truncate text-supporting text-faint">
@@ -191,96 +191,78 @@ export function OrganizationSwitcher({
               </span>
             </span>
           </div>
-          <Menu.Separator />
-          <Menu.Item className={itemClass} onClick={() => onOpenSettings()}>
-            <IconGear size={20} className={MENU_ICON} />
-            <span className="min-w-0 flex-1 truncate">Settings</span>
-          </Menu.Item>
+          {/* The one action this menu exists to offer besides switching, so
+              it is a plate rather than a row: a soft button under the name. */}
           <Menu.Item
-            className={itemClass}
-            onClick={() => onOpenSettings("members")}
+            className="mx-2 mb-1 w-auto justify-center bg-hover font-medium data-[highlighted]:bg-pressed"
+            onClick={() => setInviteOpen(true)}
           >
+            <IconUserPlus size={20} className={MENU_ICON} />
+            Invite member
+          </Menu.Item>
+          <Menu.Separator />
+          <Menu.RadioGroup value={activeId} aria-label="Organizations">
+            {accounts.map((account) => {
+              const active = account.id === activeId;
+              return (
+                <Menu.RadioItem
+                  key={account.id}
+                  value={account.id}
+                  closeOnClick
+                  onClick={() => {
+                    if (!active) bridge?.switch?.(account.id);
+                  }}
+                >
+                  <span className="flex size-5 shrink-0 items-center justify-center">
+                    {active ? (
+                      <OrganizationAppIcon className="size-5 rounded-sm object-cover" />
+                    ) : (
+                      <IconTile name={account.label} size={20} />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {active ? name : account.label}
+                  </span>
+                  {account.unread > 0 && (
+                    <span className="rounded-full bg-accent px-1.5 text-meta font-semibold tabular-nums text-on-accent">
+                      {account.unread}
+                    </span>
+                  )}
+                  {account.shortcut !== null && (
+                    <Menu.Shortcut>⌘⇧{account.shortcut}</Menu.Shortcut>
+                  )}
+                  <Menu.Check on={active} className="text-dim" />
+                </Menu.RadioItem>
+              );
+            })}
+          </Menu.RadioGroup>
+          {bridge?.inlineAdd && bridge.add && (
+            <Menu.Item onClick={() => setAddOpen(true)}>
+              <IconPlus size={20} className={MENU_ICON} />
+              <span className="min-w-0 flex-1 truncate">Add organization</span>
+            </Menu.Item>
+          )}
+          {canManage && (
+            <Menu.Item onClick={openManage}>
+              <IconServer size={20} className={MENU_ICON} />
+              <span className="min-w-0 flex-1 truncate">
+                Manage organizations
+              </span>
+            </Menu.Item>
+          )}
+          <Menu.Separator />
+          <Menu.Item onClick={() => onOpenSettings("members")}>
             <IconPeople size={20} className={MENU_ICON} />
             <span className="min-w-0 flex-1 truncate">Members</span>
-            {memberCount !== null && (
-              <span className="text-label tabular-nums text-faint">
-                {memberCount}
-              </span>
-            )}
           </Menu.Item>
-          <Menu.Item
-            className={itemClass}
-            onClick={() => setDownloadOpen(true)}
-          >
+          <Menu.Item onClick={() => setDownloadOpen(true)}>
             <IconArrowDown size={20} className={MENU_ICON} />
             <span className="min-w-0 flex-1 truncate">Download apps</span>
           </Menu.Item>
-          <Menu.Item
-            className={`${itemClass} text-accent`}
-            onClick={() => setInviteOpen(true)}
-          >
-            <IconPlus size={20} className="text-accent" />
-            <span className="min-w-0 flex-1 truncate">Invite member</span>
+          <Menu.Item onClick={() => onOpenSettings()}>
+            <IconGear size={20} className={MENU_ICON} />
+            <span className="min-w-0 flex-1 truncate">Settings</span>
           </Menu.Item>
-          <Menu.Separator />
-          <Menu.Group>
-            <Menu.GroupLabel>Organizations</Menu.GroupLabel>
-            <Menu.RadioGroup value={activeId}>
-              {accounts.map((account) => {
-                const active = account.id === activeId;
-                return (
-                  <Menu.RadioItem
-                    key={account.id}
-                    value={account.id}
-                    closeOnClick
-                    className={itemClass}
-                    onClick={() => {
-                      if (!active) bridge?.switch?.(account.id);
-                    }}
-                  >
-                    <span className="flex size-[22px] shrink-0 items-center justify-center">
-                      {active ? (
-                        <OrganizationAppIcon className="size-[22px] rounded-sm object-cover" />
-                      ) : (
-                        <IconTile name={account.label} size={22} />
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">
-                      {active ? name : account.label}
-                    </span>
-                    {account.unread > 0 && (
-                      <span className="rounded-full bg-accent px-1.5 text-meta font-semibold tabular-nums text-on-accent">
-                        {account.unread}
-                      </span>
-                    )}
-                    {account.shortcut !== null && (
-                      <Menu.Shortcut>⌘⇧{account.shortcut}</Menu.Shortcut>
-                    )}
-                    <Menu.Check on={active} className="text-dim" />
-                  </Menu.RadioItem>
-                );
-              })}
-            </Menu.RadioGroup>
-            {bridge?.inlineAdd && bridge.add && (
-              <Menu.Item
-                className={`${itemClass} text-accent`}
-                onClick={() => setAddOpen(true)}
-              >
-                <IconPlus size={20} className="text-accent" />
-                <span className="min-w-0 flex-1 truncate">
-                  Add organization
-                </span>
-              </Menu.Item>
-            )}
-            {canManage && (
-              <Menu.Item className={itemClass} onClick={openManage}>
-                <IconServer size={20} className={MENU_ICON} />
-                <span className="min-w-0 flex-1 truncate">
-                  Manage organizations
-                </span>
-              </Menu.Item>
-            )}
-          </Menu.Group>
         </Menu.Popup>
       </Menu.Root>
       <DownloadAppsDialog open={downloadOpen} onOpenChange={setDownloadOpen} />

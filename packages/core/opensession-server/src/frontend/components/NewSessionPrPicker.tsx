@@ -102,7 +102,7 @@ export function NewSessionPrPicker({
       <Menu.Popup className="w-[min(380px,calc(100vw-1rem))]">
         <Menu.Group>
           <Menu.GroupLabel>Start from</Menu.GroupLabel>
-          <Menu.Item onClick={onClear} className="phone:min-h-11">
+          <Menu.Item onClick={onClear}>
             <IconNewBranch className="shrink-0 text-dim" size={20} />
             <span className="min-w-0 grow truncate">New branch</span>
             <Menu.Check on={!selected} className="text-dim" />
@@ -151,15 +151,15 @@ export function NewSessionPrPicker({
           </div>
         )}
         {pullRequests === null ? (
-          <Menu.Item disabled className="phone:min-h-11 text-faint">
+          <Menu.Item disabled className="text-faint">
             Loading pull requests…
           </Menu.Item>
         ) : !hasRepo ? (
-          <Menu.Item disabled className="phone:min-h-11 text-faint">
+          <Menu.Item disabled className="text-faint">
             Choose a project first
           </Menu.Item>
         ) : matches.length === 0 ? (
-          <Menu.Item disabled className="phone:min-h-11 text-faint">
+          <Menu.Item disabled className="text-faint">
             {query.trim()
               ? "No matching pull requests"
               : "No open pull requests"}

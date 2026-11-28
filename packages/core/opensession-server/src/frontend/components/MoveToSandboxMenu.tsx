@@ -192,7 +192,7 @@ export function MoveToSandboxMenu({
         </span>
         <IconChevronRight size={20} className="text-faint" />
       </Menu.SubmenuTrigger>
-      <Menu.Popup className="min-w-[220px] max-w-[300px]">
+      <Menu.Popup className="max-w-[300px]">
         {current && (
           <Menu.Item
             onClick={pickHost}
