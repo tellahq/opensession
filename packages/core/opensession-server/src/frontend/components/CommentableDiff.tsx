@@ -791,7 +791,9 @@ export function CommentableDiff({ patch, options }: Props) {
                       <IconFile size={20} />
                     )}
                   </span>
-                  <span className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap text-label">
+                  {/* Swipe-scrollable for a long path, without drawing a
+                      scrollbar under the file name where the platform has one. */}
+                  <span className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none] whitespace-nowrap text-label">
                     <span className="shrink-0 font-semibold text-fg">
                       {base}
                     </span>
