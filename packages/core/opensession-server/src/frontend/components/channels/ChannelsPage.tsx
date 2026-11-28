@@ -33,6 +33,7 @@ import { ChannelCallButton } from "./ChannelCallButton";
 import { ChannelComposer, type ComposerHandle } from "./ChannelComposer";
 import { ChannelMessageRow } from "./ChannelMessageRow";
 import { ConversationGlyph, ConversationList } from "./ConversationList";
+import { ActivityPage } from "./ActivityPage";
 import { DraftsPage } from "./DraftsPage";
 import { SearchPage } from "./SearchPage";
 import { FileDropZone } from "./FileDropZone";
@@ -408,6 +409,7 @@ export function ChannelsPage({
       </EmptyState>
     );
 
+  if (route.page === "activity") return <ActivityPage navigate={navigate} />;
   if (route.page === "threads") return <ThreadsPage navigate={navigate} />;
   if (route.page === "drafts") return <DraftsPage navigate={navigate} />;
   if (route.page === "search")

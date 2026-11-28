@@ -70,6 +70,7 @@ describe("routePath", () => {
     { view: "channels", page: "threads" },
     { view: "channels", page: "drafts" },
     { view: "channels", page: "search" },
+    { view: "channels", page: "activity" },
     { view: "channels", page: "search", query: "in:#design onboarding/v2" },
     { view: "session", id: "os/1", subagent: ["agent/a"] },
     { view: "session", id: "os-1", asset: "reports/summary.html" },

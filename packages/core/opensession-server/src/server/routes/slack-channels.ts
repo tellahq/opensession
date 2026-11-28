@@ -112,6 +112,44 @@ export function uploadFileName(header: string | null): string | undefined {
   return base ? base.slice(0, 255) : undefined;
 }
 
+/** Slack search for messages that mention `self`, not counting their own. */
+export function mentionsQuery(self: string): string {
+  return `<@${self}> -from:<@${self}>`;
+}
+
+/** Search matches as the web shows them: each message with the
+ *  conversation it is in, named for a person (a DM) or the group. */
+async function searchResultViews(
+  caller: string,
+  grantToken: string,
+  found: import("../../agents/slack/search").SearchPage,
+) {
+  const { messageConverter } = await import("../../agents/slack/message-view");
+  const { resolveSlackUser } = await import("../../agents/slack/slack-api");
+  const { groupMessageName } = await import("../../agents/slack/conversations");
+  const convert = await messageConverter(caller, grantToken);
+  const results = [];
+  for (const { found: hit, raw } of found.matches) {
+    const message = await convert(raw, { inThread: true });
+    if (!message) continue;
+    const channel = (raw as { channel?: { is_mpim?: boolean } }).channel;
+    const channelName = channel?.is_mpim
+      ? groupMessageName(hit.channelName)
+      : hit.isDirect && /^U[A-Z0-9]+$/.test(hit.channelName)
+        ? (await resolveSlackUser(hit.channelName).catch(() => null))?.name ||
+          hit.channelName
+        : hit.channelName;
+    results.push({
+      channelId: hit.channelId,
+      channelName,
+      isDirect: hit.isDirect,
+      ...(hit.threadTs ? { threadTs: hit.threadTs } : {}),
+      message,
+    });
+  }
+  return results;
+}
+
 /** Slack's refusals of an edit or a delete, as one short sentence. */
 export function messageChangeError(
   error: string | undefined,
@@ -476,37 +514,12 @@ export async function handleSlackChannelRoutes(
       );
     try {
       const { searchSlack } = await import("../../agents/slack/search");
-      const { messageConverter } =
-        await import("../../agents/slack/message-view");
-      const { resolveSlackUser } = await import("../../agents/slack/slack-api");
-      const { groupMessageName } =
-        await import("../../agents/slack/conversations");
       const found = await searchSlack(caller, grantToken, query, {
         page,
         sort,
       });
-      const convert = await messageConverter(caller, grantToken);
-      const results = [];
-      for (const { found: hit, raw } of found.matches) {
-        const message = await convert(raw, { inThread: true });
-        if (!message) continue;
-        const channel = (raw as { channel?: { is_mpim?: boolean } }).channel;
-        const channelName = channel?.is_mpim
-          ? groupMessageName(hit.channelName)
-          : hit.isDirect && /^U[A-Z0-9]+$/.test(hit.channelName)
-            ? (await resolveSlackUser(hit.channelName).catch(() => null))
-                ?.name || hit.channelName
-            : hit.channelName;
-        results.push({
-          channelId: hit.channelId,
-          channelName,
-          isDirect: hit.isDirect,
-          ...(hit.threadTs ? { threadTs: hit.threadTs } : {}),
-          message,
-        });
-      }
       return Response.json({
-        results,
+        results: await searchResultViews(caller, grantToken, found),
         total: found.total,
         page: found.page,
         pages: found.pages,
@@ -520,6 +533,44 @@ export async function handleSlackChannelRoutes(
               : e?.message === "ratelimited"
                 ? "Slack asked to slow down. Try again in a minute."
                 : "Couldn't search Slack",
+        },
+        { status: e?.message === "missing_scope" ? 403 : 502 },
+      );
+    }
+  }
+
+  // Activity: the newest messages that mention the caller, by others.
+  if (path === "/api/slack/activity" && req.method === "GET") {
+    if (process.env.OPENSESSION_DEMO === "1")
+      return Response.json({ items: demoActivity() });
+    const caller = callerOf(ctx);
+    if (!caller)
+      return Response.json({ error: "Sign in first" }, { status: 401 });
+    const { mcpUserGrantToken } = await import("../mcp-oauth");
+    const grantToken = mcpUserGrantToken("slack", caller);
+    if (!grantToken)
+      return Response.json(
+        { error: "Connect your Slack account in Settings, Account" },
+        { status: 403 },
+      );
+    try {
+      const { slackSelfId } = await import("../../agents/slack/conversations");
+      const { searchSlack } = await import("../../agents/slack/search");
+      const self = await slackSelfId(caller, grantToken);
+      if (!self) throw new Error("Slack did not say who you are");
+      const found = await searchSlack(caller, grantToken, mentionsQuery(self), {
+        sort: "timestamp",
+      });
+      return Response.json({
+        items: await searchResultViews(caller, grantToken, found),
+      });
+    } catch (e: any) {
+      return Response.json(
+        {
+          error:
+            e?.message === "missing_scope"
+              ? "Reconnect Slack in Settings, Account to see your mentions"
+              : "Couldn't load your mentions",
         },
         { status: e?.message === "missing_scope" ? 403 : 502 },
       );
@@ -1290,6 +1341,66 @@ function demoSearch(query: string, sort: "score" | "timestamp") {
   if (sort === "timestamp")
     results.sort((a, b) => Number(b.message.ts) - Number(a.message.ts));
   return { results, total: results.length, page: 1, pages: 1 };
+}
+
+/** The demo's mentions of its reader, newest first. */
+function demoActivity() {
+  const now = Math.floor(Date.now() / 1000);
+  const people = {
+    ada: { userName: "Ada Lovelace", userId: "UDEMOADA" },
+    grace: { userName: "Grace Hopper", userId: "UDEMOGRACE" },
+    alan: { userName: "Alan Turing", userId: "UDEMOALAN" },
+  };
+  const item = (
+    channelId: string,
+    channelName: string,
+    isDirect: boolean,
+    who: { userName: string; userId: string },
+    ago: number,
+    text: string,
+    threadTs?: string,
+  ) => ({
+    channelId,
+    channelName,
+    isDirect,
+    ...(threadTs ? { threadTs } : {}),
+    message: {
+      ts: `${now - ago}.000100`,
+      text,
+      ...who,
+      isBot: false,
+      replyCount: 0,
+      reactions: [],
+    },
+  });
+  const design = demoHistory("CDEMO0001")[2];
+  return [
+    item(
+      "CDEMO0002",
+      "engineering",
+      false,
+      people.grace,
+      300,
+      "[[@You]] can you sign off the release notes before 4?",
+    ),
+    item(
+      "CDEMO0001",
+      "design",
+      false,
+      people.alan,
+      3600,
+      "[[@You]] the Safari fix is ready for a look",
+      design?.ts,
+    ),
+    item(
+      "CDEMO0004",
+      "launches",
+      false,
+      people.ada,
+      86400 + 600,
+      "Thanks [[@You]], the launch post reads much better now.",
+    ),
+  ];
 }
 
 function demoThreads() {
