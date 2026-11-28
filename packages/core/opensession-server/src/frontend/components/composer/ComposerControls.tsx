@@ -217,8 +217,8 @@ export function ComposerAddMenu({
       // above dismisses the menu for any mousedown that isn't inside one.
       className={cn(
         "composer-pop-wrap relative inline-flex shrink-0",
-        // Phones pull the model pill to the front of the toolbar, so the
-        // "+" has to lead it; in the resting pill it opens the row.
+        // The "+" leads the toolbar, the model pill right after it; in the
+        // resting phone pill it opens the row.
         minimized ? "order-1" : "phone:order-[-2]",
       )}
     >
