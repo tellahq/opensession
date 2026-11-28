@@ -268,6 +268,32 @@ describe("WebSocket command outbox", () => {
     ).toEqual({ ok: false, reason: "full" });
   });
 
+  test("makes room for a new command by dropping the oldest ones", () => {
+    let now = 0;
+    const storage = new MemoryStorage();
+    const outbox = new WsCommandOutbox(storage, () => now, KEY);
+    const third = Math.floor(MAX_COMMAND_BYTES / 3);
+    for (const id of ["a", "b", "c"]) {
+      now += 1;
+      expect(
+        outbox.tryPut({
+          type: "cancel",
+          requestId: id,
+          sessionId: "s".repeat(third - 200),
+        }),
+      ).toEqual({ ok: true });
+    }
+    now += 1;
+    expect(
+      outbox.tryPut({
+        type: "cancel",
+        requestId: "d",
+        sessionId: "s".repeat(third - 200),
+      }),
+    ).toEqual({ ok: true });
+    expect(outbox.pending().map((m) => m.requestId)).toEqual(["b", "c", "d"]);
+  });
+
   test("keeps transient failures until a completed or terminal receipt", () => {
     expect(shouldRetireCommandResult({ status: "failed" })).toBe(false);
     expect(

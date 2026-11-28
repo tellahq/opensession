@@ -1313,8 +1313,12 @@ export function AppContent({
               <Settings
                 onBack={leaveSettings}
                 section={settingsSectionOf(urlRoute)}
+                repo={urlRoute.view === "settings" ? urlRoute.repo : undefined}
                 onShowRoot={() => navigate({ view: "settings" })}
                 onSelect={(key) => navigate(settingsRoute(key))}
+                onSelectRepo={(repo) =>
+                  navigate({ view: "settings", section: "repos", repo })
+                }
               >
                 <ToolPage route={urlRoute} navigate={navigate} />
               </Settings>

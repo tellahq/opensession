@@ -26,6 +26,7 @@ import { useConfirm } from "../ui/confirm";
 import {
   IconArrowUpToLine,
   IconBranches,
+  IconChevronRight,
   IconDotsHorizontal,
   IconPlus,
   IconTrash,
@@ -74,10 +75,49 @@ import { errorMessage } from "../lib/error-message";
 // and a project that exists nowhere yet starts as a new repository here.
 // The New session palette offers that same start from its Project picker.
 
+/** The add-repository picker as a dialog of its own, for a surface that has
+ *  no ReposSection to open it from (the Settings nav). Closes once the repo
+ *  is added. */
+export function AddRepositoryDialog({
+  open,
+  onOpenChange,
+  onAdded,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAdded?: () => void | Promise<void>;
+}) {
+  const [pendingRepo, setPendingRepo] = useState<PendingRepo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <Modal.Root open={open} onOpenChange={onOpenChange}>
+      <Modal.Content widthClassName="max-w-lg" initialFocus={input}>
+        <Modal.Header
+          title="Add repository"
+          description="Clone one, register a checkout on the server, or start a new one."
+        />
+        <AddRepoPicker
+          inputRef={input}
+          onAdded={async () => {
+            await onAdded?.();
+            onOpenChange(false);
+          }}
+          pendingRepo={pendingRepo}
+          onPendingChange={setPendingRepo}
+          error={error}
+          setError={setError}
+        />
+      </Modal.Content>
+    </Modal.Root>
+  );
+}
+
 export function ReposSection({
   repos,
   onChanged,
   onRepoUpdated,
+  onOpenRepo,
   compact = false,
   showLifecycleStatus = true,
 }: {
@@ -87,6 +127,8 @@ export function ReposSection({
     updated: Pick<SetupRepo, "id"> &
       Partial<Pick<SetupRepo, "defaultBranch" | "isolatedWorktrees">>,
   ) => void;
+  /** Rows open the repository's own page instead of a ⋯ menu. */
+  onOpenRepo?: (id: string) => void;
   compact?: boolean;
   showLifecycleStatus?: boolean;
 }) {
@@ -155,7 +197,7 @@ export function ReposSection({
         >
           <Modal.Header
             title="Add repository"
-            description="Clone a remote repository, register a Git checkout already on the server, or start a new one."
+            description="Clone one, register a checkout on the server, or start a new one."
           />
           <AddRepoPicker
             inputRef={pickerInput}
@@ -184,6 +226,7 @@ export function ReposSection({
                   onAppearanceChanged={loadAppearance}
                   onChanged={onChanged}
                   onRepoUpdated={onRepoUpdated}
+                  onOpen={onOpenRepo && (() => onOpenRepo(repo.id))}
                 />
               );
             }
@@ -228,6 +271,7 @@ function RepositoryRow({
   onAppearanceChanged,
   onChanged,
   onRepoUpdated,
+  onOpen,
 }: {
   repo: SetupStatus["repos"][number];
   appearance: RepoInfo | undefined;
@@ -237,8 +281,30 @@ function RepositoryRow({
     updated: Pick<SetupRepo, "id"> &
       Partial<Pick<SetupRepo, "defaultBranch" | "isolatedWorktrees">>,
   ) => void;
+  onOpen?: () => void;
 }) {
   const lifecycle = repoLifecycleState(repo);
+
+  if (onOpen)
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-5 py-3.5 text-left transition-[background-color] hover:bg-hover"
+      >
+        <RepoTile name={repo.id} size={28} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-item-title font-medium text-fg">
+            {repo.label}
+          </span>
+          <span className="block truncate font-mono text-meta text-dim">
+            {repo.path}
+          </span>
+        </span>
+        <StateChip tone={lifecycle.tone} label={lifecycle.label} />
+        <IconChevronRight size={20} className="shrink-0 text-faint" />
+      </button>
+    );
 
   return (
     <SettingRow className="items-start">
@@ -543,7 +609,7 @@ function RepoActionsMenu({
  * taking the owner's avatar for every repo put one identical tile on all of
  * them.
  */
-function RepoTileButton({
+export function RepoTileButton({
   id,
   repo,
   onChanged,

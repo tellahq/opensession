@@ -587,6 +587,18 @@ export function IconDotsVertical(p: IconProps) {
   );
 }
 
+// A key: the Keychain, credentials sessions borrow with your approval.
+export function IconKey(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="8.25" cy="15.75" r="3.5" />
+      <path {...stroke} d="M10.75 13.25L18.25 5.75" />
+      <path {...stroke} d="M15.75 8.25L18 10.5" />
+      <path {...stroke} d="M17.25 6.75L19.25 8.75" />
+    </Svg>
+  );
+}
+
 // A padlock: a private Slack channel in the Channels place.
 export function IconLock(p: IconProps) {
   return (

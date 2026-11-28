@@ -26,7 +26,12 @@ export type Route =
   | { view: "automations"; id?: string }
   | { view: "security" }
   | { view: "goals"; id?: string }
-  | { view: "settings"; section?: SettingsSectionKey }
+  | {
+      view: "settings";
+      section?: SettingsSectionKey;
+      /** On the repos section, the repository whose page is open. */
+      repo?: string;
+    }
   | { view: "archived" }
   | { view: "inbox" }
   | { view: "catchup" }
@@ -48,6 +53,7 @@ export function isChannelsPage(value: string): value is ChannelsPageName {
 const TOOL_VIEWS = new Set(["automations", "security", "goals"]);
 const SETTINGS_SECTIONS: ReadonlySet<string> = new Set<SettingsSectionKey>([
   "myAccounts",
+  "keychain",
   "preferences",
   "appearance",
   "notifications",
@@ -81,7 +87,6 @@ const LEGACY_SETTINGS_SECTIONS = new Map<string, SettingsSectionKey>([
   ["personalPrompt", "preferences"],
   ["deskVoice", "preferences"],
   ["composer", "preferences"],
-  ["keychain", "myAccounts"],
   ["profile", "myAccounts"],
   ["identity", "general"],
   ["authentication", "general"],
@@ -216,6 +221,13 @@ export function parseRoute(pathname: string): Route {
   const settings = path.match(/^\/settings(?:\/(.+))?$/);
   if (settings) {
     const key = settings[1];
+    const repoPage = key?.match(/^repos\/(.+)$/);
+    if (repoPage)
+      return {
+        view: "settings",
+        section: "repos",
+        repo: decodeURIComponent(repoPage[1]!),
+      };
     if (key && isToolView(key)) return { view: key };
     if (key && isSettingsSection(key)) {
       return { view: "settings", section: key };
@@ -289,7 +301,11 @@ export function routePath(route: Route): string {
         : `${BASE_PATH}/goals`;
     case "settings":
       return route.section
-        ? `${BASE_PATH}/settings/${route.section}`
+        ? `${BASE_PATH}/settings/${route.section}${
+            route.section === "repos" && route.repo
+              ? `/${encodeURIComponent(route.repo)}`
+              : ""
+          }`
         : `${BASE_PATH}/settings`;
     case "archived":
       return `${BASE_PATH}/archived`;

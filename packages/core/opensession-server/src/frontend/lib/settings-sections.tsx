@@ -12,6 +12,7 @@ import {
   IconDatabase,
   IconFileText2,
   IconHome,
+  IconKey,
   IconGlobe,
   IconKeyboard,
   IconPalette,
@@ -39,6 +40,7 @@ export type ToolSectionKey = "automations" | "goals" | "security";
 /** Listed in nav order (SECTIONS below). */
 export type SettingsSectionKey =
   | "myAccounts"
+  | "keychain"
   | "preferences"
   | "appearance"
   | "notifications"
@@ -94,6 +96,12 @@ export const SECTIONS: SettingsSection[] = [
     label: "Account",
     scope: "personal",
     icon: <IconUser />,
+  },
+  {
+    key: "keychain",
+    label: "Keychain",
+    scope: "personal",
+    icon: <IconKey />,
   },
   {
     key: "preferences",

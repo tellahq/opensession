@@ -38,6 +38,7 @@ import { shouldReloadAfterGithubAuthEnabled } from "../../lib/github-app-setup";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { setupRequest, type SetupGithub } from "../setup-shared";
 import { SetupRestart } from "../SetupRestart";
+import { DefaultRepoRow, SharedCheckoutSetting } from "./ReposPanel";
 
 const NAME_INPUT_CLASS = cn(settingsInputClass, "w-[220px] max-w-full");
 
@@ -319,11 +320,6 @@ export function OrganizationProfileSection({
               </>
             )}
           </SettingCard>
-          {!onboarding && (
-            <SettingsHint>
-              Shared by everyone in this organization.
-            </SettingsHint>
-          )}
         </>
       ) : (
         <SettingCardSkeleton rows={2} label="Loading organization settings" />
@@ -425,6 +421,9 @@ export function GeneralPanel() {
       <SettingsHeader title="General" className="phone:hidden" />
       <OrganizationProfileSection />
       <SignInSection />
+      <SettingsGroupLabel>Repositories</SettingsGroupLabel>
+      <DefaultRepoRow />
+      <SharedCheckoutSetting />
     </SettingsPanel>
   );
 }

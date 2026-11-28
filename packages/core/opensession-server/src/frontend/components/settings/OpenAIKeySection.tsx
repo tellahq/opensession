@@ -86,7 +86,7 @@ export function OpenAIKeySection() {
 
   return (
     <>
-      <SettingsGroupLabel>Voice and Autocomplete</SettingsGroupLabel>
+      <SettingsGroupLabel>Voice and autocomplete</SettingsGroupLabel>
       <SettingCard>
         {status?.configured ? (
           <SettingRow

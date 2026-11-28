@@ -11,12 +11,12 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { OptionSelect } from "../../ui/select";
 import {
+  SettingCard,
   SettingCardSkeleton,
   SettingsField,
   SettingsForm,
   SettingsFormActions,
   SettingsFormRow,
-  SettingsGroupLabel,
   SettingsHeader,
   SettingsHint,
   SettingsPanel,
@@ -25,6 +25,7 @@ import {
 import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
+import { SettingRow } from "./shared";
 
 interface StorageDraft {
   provider: "local" | "s3";
@@ -157,19 +158,6 @@ export function StoragePanel() {
         title="Storage"
         description="Where session assets are kept."
       />
-      <SettingsGroupLabel
-        actions={
-          draft?.provider === "s3" && (tested || saved?.provider === "s3") ? (
-            <StatusChip
-              label={tested ? "Tested" : "Configured"}
-              dot="var(--green)"
-            />
-          ) : undefined
-        }
-      >
-        Asset storage
-      </SettingsGroupLabel>
-
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
@@ -177,141 +165,162 @@ export function StoragePanel() {
       {!draft ? (
         <SettingCardSkeleton rows={4} label="Loading asset storage" />
       ) : (
-        <SettingsForm>
-          <SettingsField>
-            Storage backend
-            <OptionSelect
-              label="Storage backend"
-              value={draft.provider}
-              disabled={!!busy}
-              className="w-full"
-              options={[
-                { value: "local", label: "Local disk" },
-                { value: "s3", label: "S3-compatible" },
-              ]}
-              onChange={(provider) => patch({ provider })}
+        <>
+          <SettingCard>
+            <SettingRow
+              title="Kept on"
+              desc="S3 works with AWS S3, Cloudflare R2 and compatible services."
+              control={
+                <>
+                  {draft.provider === "s3" &&
+                    (tested || saved?.provider === "s3") && (
+                      <StatusChip
+                        label={tested ? "Tested" : "Connected"}
+                        dot="var(--green)"
+                      />
+                    )}
+                  <OptionSelect
+                    label="Kept on"
+                    value={draft.provider}
+                    disabled={!!busy}
+                    options={[
+                      { value: "local", label: "Local disk" },
+                      { value: "s3", label: "S3" },
+                    ]}
+                    onChange={(provider) => patch({ provider })}
+                  />
+                </>
+              }
             />
-          </SettingsField>
+          </SettingCard>
+          {(draft.provider === "s3" || changed) && (
+            <SettingsForm>
+              {draft.provider === "s3" && (
+                <>
+                  <SettingsFormRow>
+                    <SettingsField>
+                      Bucket
+                      <Input
+                        value={draft.bucket}
+                        disabled={!!busy}
+                        placeholder="opensession-assets"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        onChange={(event) =>
+                          patch({ bucket: event.target.value })
+                        }
+                      />
+                    </SettingsField>
+                    <SettingsField>
+                      Region
+                      <Input
+                        value={draft.region}
+                        disabled={!!busy}
+                        placeholder="us-east-1"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        onChange={(event) =>
+                          patch({ region: event.target.value })
+                        }
+                      />
+                    </SettingsField>
+                  </SettingsFormRow>
+                  <SettingsField>
+                    Endpoint
+                    <Input
+                      value={draft.endpoint}
+                      disabled={!!busy}
+                      placeholder="https://account-id.r2.cloudflarestorage.com"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      onChange={(event) =>
+                        patch({ endpoint: event.target.value })
+                      }
+                    />
+                  </SettingsField>
+                  <SettingsFormRow>
+                    <SettingsField>
+                      Access key ID
+                      <Input
+                        value={draft.accessKeyId}
+                        disabled={!!busy}
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        onChange={(event) =>
+                          patch({ accessKeyId: event.target.value })
+                        }
+                      />
+                    </SettingsField>
+                    <SettingsField>
+                      Secret access key
+                      <Input
+                        type="password"
+                        value={draft.secretAccessKey}
+                        disabled={!!busy}
+                        autoComplete="off"
+                        placeholder={
+                          draft.secretAccessKeySet
+                            ? "Leave blank to keep current key"
+                            : "Secret key"
+                        }
+                        onChange={(event) =>
+                          patch({ secretAccessKey: event.target.value })
+                        }
+                      />
+                    </SettingsField>
+                  </SettingsFormRow>
+                  <SettingsFormRow>
+                    <SettingsField>
+                      Object prefix
+                      <Input
+                        value={draft.prefix}
+                        disabled={!!busy}
+                        placeholder="opensession-assets"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        onChange={(event) =>
+                          patch({ prefix: event.target.value })
+                        }
+                      />
+                    </SettingsField>
+                    <label className="mb-3 flex min-h-10 items-center justify-between gap-4 text-label font-medium text-dim">
+                      Path-style URLs
+                      <Switch
+                        aria-label="Path-style URLs"
+                        checked={draft.forcePathStyle}
+                        disabled={!!busy}
+                        onCheckedChange={(forcePathStyle) =>
+                          patch({ forcePathStyle })
+                        }
+                      />
+                    </label>
+                  </SettingsFormRow>
+                </>
+              )}
 
-          {draft.provider === "s3" && (
-            <>
-              <SettingsFormRow>
-                <SettingsField>
-                  Bucket
-                  <Input
-                    value={draft.bucket}
-                    disabled={!!busy}
-                    placeholder="opensession-assets"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    onChange={(event) => patch({ bucket: event.target.value })}
-                  />
-                </SettingsField>
-                <SettingsField>
-                  Region
-                  <Input
-                    value={draft.region}
-                    disabled={!!busy}
-                    placeholder="us-east-1"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    onChange={(event) => patch({ region: event.target.value })}
-                  />
-                </SettingsField>
-              </SettingsFormRow>
-              <SettingsField>
-                Endpoint
-                <Input
-                  value={draft.endpoint}
-                  disabled={!!busy}
-                  placeholder="https://account-id.r2.cloudflarestorage.com"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  onChange={(event) => patch({ endpoint: event.target.value })}
-                />
-              </SettingsField>
-              <SettingsFormRow>
-                <SettingsField>
-                  Access key ID
-                  <Input
-                    value={draft.accessKeyId}
-                    disabled={!!busy}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    onChange={(event) =>
-                      patch({ accessKeyId: event.target.value })
-                    }
-                  />
-                </SettingsField>
-                <SettingsField>
-                  Secret access key
-                  <Input
-                    type="password"
-                    value={draft.secretAccessKey}
-                    disabled={!!busy}
-                    autoComplete="off"
-                    placeholder={
-                      draft.secretAccessKeySet
-                        ? "Leave blank to keep current key"
-                        : "Secret key"
-                    }
-                    onChange={(event) =>
-                      patch({ secretAccessKey: event.target.value })
-                    }
-                  />
-                </SettingsField>
-              </SettingsFormRow>
-              <SettingsFormRow>
-                <SettingsField>
-                  Object prefix
-                  <Input
-                    value={draft.prefix}
-                    disabled={!!busy}
-                    placeholder="opensession-assets"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    onChange={(event) => patch({ prefix: event.target.value })}
-                  />
-                </SettingsField>
-                <label className="mb-3 flex min-h-10 items-center justify-between gap-4 text-label font-medium text-dim">
-                  Path-style URLs
-                  <Switch
-                    aria-label="Path-style URLs"
-                    checked={draft.forcePathStyle}
-                    disabled={!!busy}
-                    onCheckedChange={(forcePathStyle) =>
-                      patch({ forcePathStyle })
-                    }
-                  />
-                </label>
-              </SettingsFormRow>
-            </>
+              <SettingsFormActions>
+                {draft.provider === "s3" && (
+                  <Button
+                    variant="soft"
+                    disabled={!!busy || !ready}
+                    onClick={() => void testConnection()}
+                  >
+                    {busy === "test" ? "Testing…" : "Test connection"}
+                  </Button>
+                )}
+                <Button
+                  variant="primary"
+                  disabled={!!busy || !changed || !ready}
+                  onClick={() => void save()}
+                >
+                  {busy === "save" ? "Saving…" : "Save"}
+                </Button>
+              </SettingsFormActions>
+            </SettingsForm>
           )}
-
-          <SettingsFormActions>
-            {draft.provider === "s3" && (
-              <Button
-                variant="soft"
-                disabled={!!busy || !ready}
-                onClick={() => void testConnection()}
-              >
-                {busy === "test" ? "Testing…" : "Test connection"}
-              </Button>
-            )}
-            <Button
-              variant="primary"
-              disabled={!!busy || !changed || !ready}
-              onClick={() => void save()}
-            >
-              {busy === "save" ? "Saving…" : "Save"}
-            </Button>
-          </SettingsFormActions>
-        </SettingsForm>
+        </>
       )}
-      <SettingsHint>
-        S3 works with AWS S3, Cloudflare R2 and compatible services.
-      </SettingsHint>
     </SettingsPanel>
   );
 }

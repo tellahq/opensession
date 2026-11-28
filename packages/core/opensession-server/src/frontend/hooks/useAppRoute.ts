@@ -514,6 +514,9 @@ export class AppRouteController {
   }
 
   canonicalizePath(path: string): void {
+    // The page under the Settings modal keeps rendering, and may tidy its own
+    // address; the address bar belongs to Settings until it closes.
+    if (isSettingsRoute(this.route)) return;
     this.browser.history.replaceState(this.browser.history.state, "", path);
   }
 

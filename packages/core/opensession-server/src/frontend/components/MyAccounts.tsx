@@ -28,7 +28,6 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { useCurrentUser } from "./UserPicker";
 import { GithubAccounts } from "./Connections";
-import { KeychainSection } from "./settings/KeychainPanel";
 import { ProfileSection } from "./settings/ProfileSection";
 import { errorMessage } from "../lib/error-message";
 
@@ -202,7 +201,6 @@ export function MyAccountsPanel() {
           })}
         </SettingCard>
       )}
-      <KeychainSection />
     </SettingsPanel>
   );
 }

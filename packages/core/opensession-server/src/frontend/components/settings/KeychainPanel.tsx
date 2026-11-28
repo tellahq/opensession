@@ -17,6 +17,7 @@ import {
   type KeychainGrantDto,
 } from "../../lib/api";
 import { Badge } from "../../ui/badge";
+import { Menu } from "../../ui/menu";
 import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
 import { useConfirm } from "../../ui/confirm";
@@ -26,26 +27,59 @@ import {
   SettingCard,
   SettingCardSkeleton,
   SettingsGroupLabel,
+  SettingsHeader,
   SettingsHint,
+  SettingsPanel,
+  rowMenuTriggerClasses,
 } from "../../ui/settings";
-import { EmptyState, InlineAlert } from "../../ui/state";
+import { IconTile } from "../BrandTile";
+import {
+  IconDotsHorizontal,
+  IconKey,
+  IconPeople,
+  IconPlus,
+  IconTrash,
+  IconUser,
+} from "../icons";
+import { UserAvatar } from "../UserAvatar";
+import { InlineAlert } from "../../ui/state";
 import { SettingRow } from "./shared";
 
 // ── Keychain: per-person credentials sessions can BORROW with your approval
 // (src/server/keychain.ts). Registration lives here rather than in a tool
 // because a secret pasted into a session prompt is a secret in the transcript.
-//
-// It renders as a section of Settings → Account rather than a page of its
-// own: a credential you lend to a session is the same kind of thing as an
-// account a session acts as, and it was one thin page in a nav that is already
-// 22 entries deep. Old /settings/keychain links redirect there (App.tsx's
-// LEGACY_SETTINGS_SECTIONS). ──
-export function KeychainSection() {
-  const [data, setData] = useState<{
-    credentials: KeychainCredentialDto[];
-    grants: KeychainGrantDto[];
-    asks: KeychainAskDto[];
-  } | null>(null);
+// Old /settings/keychain links open this page again. ──
+
+type KeychainData = {
+  credentials: KeychainCredentialDto[];
+  grants: KeychainGrantDto[];
+  asks: KeychainAskDto[];
+};
+
+/** What a credential reaches, in one line: the login or the API host, and
+ *  any ceiling on methods and paths. */
+function credentialReach(c: KeychainCredentialDto): string {
+  return [
+    c.kind === "login" ? (c.username ?? "") : c.host,
+    c.kind === "login" ? c.host : null,
+    c.allowedMethods?.length ? `${c.allowedMethods.join(", ")} only` : null,
+    c.allowedPathPrefixes?.length ? c.allowedPathPrefixes.join(", ") : null,
+    c.statusOnly ? "Status codes only" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** "in 3 days", "in 5 hours": when a grant runs out. */
+function expiresIn(iso: string, now = Date.now()): string {
+  const hours = Math.max(0, (new Date(iso).getTime() - now) / 3_600_000);
+  if (hours < 1) return "Expires within the hour";
+  if (hours < 48) return `Expires in ${Math.round(hours)} hours`;
+  return `Expires in ${Math.round(hours / 24)} days`;
+}
+
+export function KeychainPanel() {
+  const [data, setData] = useState<KeychainData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<"api" | "login" | null>(null);
   const serviceRef = useRef<HTMLInputElement>(null);
@@ -57,58 +91,59 @@ export function KeychainSection() {
       .catch((e) => setError(e.message));
   };
   useEffect(reload, [reload]);
+  const fail = (e: Error) => setError(e.message);
 
-  // The label, its action and the hint below the card are all static, so they
-  // stay while the credentials are in flight — only the list is unknown, and
-  // ghosting more than that is what makes the block change height when the
-  // answer lands.
-  const label = (
-    <SettingsGroupLabel
-      actions={
-        <>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!data}
-            onClick={() => setAdding("login")}
-          >
-            Add login
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!data}
-            onClick={() => setAdding("api")}
-          >
-            Add credential
-          </Button>
-        </>
-      }
-    >
-      Keychain
-    </SettingsGroupLabel>
+  const addMenu = (
+    <Menu.Root>
+      <Menu.Trigger
+        render={
+          <Button size="sm" icon={<IconPlus size={20} />} disabled={!data} />
+        }
+      >
+        Add
+      </Menu.Trigger>
+      <Menu.Popup align="end" sideOffset={4} className="min-w-56">
+        <Menu.Item onClick={() => setAdding("login")}>
+          <IconUser size={20} className="text-dim" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span>Login</span>
+            <span className="text-meta text-faint">Username and password</span>
+          </span>
+        </Menu.Item>
+        <Menu.Item onClick={() => setAdding("api")}>
+          <IconKey size={20} className="text-dim" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span>API key</span>
+            <span className="text-meta text-faint">Sent with each call</span>
+          </span>
+        </Menu.Item>
+      </Menu.Popup>
+    </Menu.Root>
   );
-  const hint = (
-    <SettingsHint>
-      Sessions use these with your approval and never see the secret. Add only
-      test logins.
-    </SettingsHint>
+
+  const header = (
+    <SettingsHeader
+      title="Keychain"
+      description="Sessions use these with your approval and never see the secret."
+      actions={addMenu}
+    />
   );
 
   if (!data)
     return (
-      <>
-        {label}
+      <SettingsPanel>
+        {header}
         {error ? (
           <InlineAlert>{error}</InlineAlert>
         ) : (
-          <SettingCardSkeleton rows={2} label="Loading keychain" />
+          <SettingCardSkeleton rows={2} icon={32} label="Loading keychain" />
         )}
-        {hint}
-      </>
+      </SettingsPanel>
     );
 
   const byId = new Map(data.credentials.map((c) => [c.id, c]));
+  const mine = data.credentials.filter((c) => c.mine);
+  const shared = data.credentials.filter((c) => !c.mine);
   const activeGrants = data.grants.filter((g) => g.status === "active");
   const pending = data.asks.filter((a) => a.status === "pending");
   const serviceOf = (id: string) => byId.get(id)?.service ?? id;
@@ -125,21 +160,19 @@ export function KeychainSection() {
   const answer = (
     id: string,
     decision: Parameters<typeof answerKeychainAsk>[1],
-  ) =>
-    answerKeychainAsk(id, decision)
-      .then(reload)
-      .catch((e) => setError(e.message));
+  ) => answerKeychainAsk(id, decision).then(reload).catch(fail);
+
   const setScope = (c: KeychainCredentialDto) => {
     const sharing = c.scope !== "workspace";
     confirm({
       title: sharing
-        ? `Share ${c.service} with the workspace?`
+        ? `Share ${c.service} with everyone?`
         : `Make ${c.service} personal?`,
       description: sharing
         ? c.kind === "login"
-          ? "Every session in the workspace can have its password released without asking you, and the agent can read it then. Each release is audited with its purpose."
-          : "Every session in the workspace can call it without asking you, within its host, methods and paths. Calls are still audited."
-        : "Sessions will have to ask you again before using it. Access they got without asking ends now.",
+          ? "Any session can get its password without asking you. Each release is audited."
+          : "Any session can call it without asking you, within its limits. Calls are audited."
+        : "Sessions will have to ask you again, and access they got without asking ends now.",
       confirmLabel: sharing ? "Share" : "Make personal",
       onConfirm: () =>
         void setKeychainCredentialScope(
@@ -147,17 +180,73 @@ export function KeychainSection() {
           sharing ? "workspace" : "personal",
         )
           .then(reload)
-          .catch((e) => setError(e.message)),
+          .catch(fail),
     });
   };
+  const remove = (c: KeychainCredentialDto) =>
+    confirm({
+      title: `Delete ${c.service}?`,
+      description: "Sessions lose access to it right away.",
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: () =>
+        void deleteKeychainCredential(c.id).then(reload).catch(fail),
+    });
+
+  const credentialRow = (c: KeychainCredentialDto) => (
+    <SettingRow
+      key={c.id}
+      title={
+        <span className="flex min-w-0 items-center gap-3">
+          <IconTile name={c.service} size={32} />
+          <span className="min-w-0">
+            <span className="flex items-center gap-2">
+              <span className="truncate">{c.service}</span>
+              {c.scope === "workspace" && <Badge>Shared</Badge>}
+            </span>
+            <span className="mt-0.5 block truncate text-supporting font-normal text-dim">
+              {c.mine ? credentialReach(c) : `From ${c.owner}`}
+            </span>
+          </span>
+        </span>
+      }
+      control={
+        c.mine ? (
+          <Menu.Root>
+            <Menu.Trigger
+              className={rowMenuTriggerClasses}
+              aria-label={`Manage ${c.service}`}
+            >
+              <IconDotsHorizontal size={20} />
+            </Menu.Trigger>
+            <Menu.Popup align="end" sideOffset={4}>
+              <Menu.Item onClick={() => setScope(c)}>
+                <IconPeople size={20} className="text-dim" />
+                {c.scope === "workspace"
+                  ? "Make personal"
+                  : "Share with everyone"}
+              </Menu.Item>
+              <Menu.Separator />
+              <Menu.Item
+                className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+                onClick={() => remove(c)}
+              >
+                <IconTrash size={20} />
+                Delete
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Root>
+        ) : null
+      }
+    />
+  );
 
   return (
-    <>
+    <SettingsPanel>
+      {header}
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
-
-      {label}
       {confirmDialog}
 
       <Modal.Root
@@ -167,10 +256,7 @@ export function KeychainSection() {
         }}
       >
         {/* The form is a child so Base UI's portal remounts it on every
-				    open. That is what clears the typed secret when the dialog is
-				    dismissed rather than saved: it used to be cleared only on a
-				    successful submit, so cancelling left it sitting in a React
-				    state a devtools user could read back. */}
+            open, which clears a typed secret when the dialog is dismissed. */}
         <Modal.Content initialFocus={serviceRef}>
           {adding === "login" ? (
             <AddLoginForm
@@ -194,128 +280,66 @@ export function KeychainSection() {
         </Modal.Content>
       </Modal.Root>
 
-      {data.credentials.length === 0 ? (
-        <EmptyState placement="card">No credentials yet.</EmptyState>
-      ) : (
-        <SettingCard>
-          {data.credentials.map((c) => (
-            <SettingRow
-              key={c.id}
-              title={
-                <span className="inline-flex flex-wrap items-center gap-2">
-                  {c.kind === "login"
-                    ? `${c.service} · ${c.username ?? ""}`
-                    : `${c.service} · ${c.host}`}
-                  {c.scope === "workspace" && (
-                    <Badge tone="info">Workspace</Badge>
-                  )}
-                </span>
-              }
-              desc={[
-                c.kind === "login" ? `login on ${c.loginUrl ?? c.host}` : null,
-                `owner ${c.owner}`,
-                c.description,
-                c.allowedMethods?.length
-                  ? `methods ${c.allowedMethods.join("/")}`
-                  : null,
-                c.allowedPathPrefixes?.length
-                  ? `paths ${c.allowedPathPrefixes.join(", ")}`
-                  : null,
-                c.statusOnly ? "status only" : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              control={
-                c.mine ? (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setScope(c)}
-                    >
-                      {c.scope === "workspace" ? "Make personal" : "Share"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        deleteKeychainCredential(c.id)
-                          .then(reload)
-                          .catch((e) => setError(e.message))
-                      }
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                ) : null
-              }
-            />
-          ))}
-        </SettingCard>
-      )}
-      {hint}
-
-      {/* Teammates asking to borrow one of your credentials. Only the
-			    owner can answer, here or in the Slack DM; never as a card in
-			    the asking session, where anyone watching could click it. */}
+      {/* Teammates asking to borrow one of your credentials come first: they
+          are waiting on you. Only the owner can answer, here or in Slack;
+          never in the asking session, where anyone watching could click. */}
       {toAnswer.length > 0 && (
         <>
-          <SettingsGroupLabel>Requests for your credentials</SettingsGroupLabel>
+          <SettingsGroupLabel>Requests</SettingsGroupLabel>
           <SettingCard>
             {toAnswer.map((a) => (
               <SettingRow
                 key={a.id}
-                title={`${a.requestedBy} wants ${
-                  a.run?.group
-                    ? sameRun(a)
-                        .map((o) => serviceOf(o.credentialId))
-                        .join(" and ")
-                    : serviceOf(a.credentialId)
-                }`}
-                desc={
-                  a.requestedMode === "release"
-                    ? `Wants the password, which the agent will see · ${a.purpose}`
-                    : a.run?.group
-                      ? `Scripted run with ${a.run.group.members
-                          .map(
-                            (m) =>
-                              `${m.service} (owner ${m.owner}, up to ${m.maxCalls.toLocaleString()} calls)`,
-                          )
-                          .join(
-                            ", ",
-                          )}; starts once every owner allows it · ${a.run.command} · ${a.purpose}`
-                      : a.run
-                        ? `Scripted run, up to ${a.run.maxCalls.toLocaleString()} calls · ${a.run.command} · ${a.purpose}`
-                        : `Asked for ${a.requestedMode === "once" ? "one call" : "7 days"} · ${a.purpose}`
+                title={
+                  <span className="flex min-w-0 items-start gap-3">
+                    <UserAvatar name={a.requestedBy} size={32} />
+                    <span className="min-w-0">
+                      <span className="block">
+                        {a.requestedBy} wants{" "}
+                        {a.run?.group
+                          ? sameRun(a)
+                              .map((o) => serviceOf(o.credentialId))
+                              .join(" and ")
+                          : serviceOf(a.credentialId)}
+                      </span>
+                      <span className="mt-0.5 block text-supporting font-normal text-dim">
+                        {a.requestedMode === "release"
+                          ? "The password, which the agent will see"
+                          : a.run
+                            ? `A script, up to ${(a.run.group ? a.run.group.members.reduce((n, m) => n + m.maxCalls, 0) : a.run.maxCalls).toLocaleString()} calls`
+                            : a.requestedMode === "once"
+                              ? "One call"
+                              : "Access for 7 days"}
+                        {" · "}
+                        {a.purpose}
+                      </span>
+                      {a.run && (
+                        <code className="mt-1.5 block truncate text-meta text-faint">
+                          {a.run.command}
+                        </code>
+                      )}
+                    </span>
+                  </span>
                 }
                 controlClassName="flex flex-wrap justify-end gap-1"
                 control={
-                  a.requestedMode === "release" ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => answer(a.id, "decline")}
-                      >
-                        Decline
-                      </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => answer(a.id, "decline")}
+                    >
+                      Decline
+                    </Button>
+                    {a.requestedMode === "release" ? (
                       <Button
                         size="sm"
                         variant="primary"
                         onClick={() => answer(a.id, "release")}
                       >
-                        Release password
+                        Release
                       </Button>
-                    </>
-                  ) : a.run ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => answer(a.id, "decline")}
-                      >
-                        Decline
-                      </Button>
+                    ) : a.run ? (
                       <Button
                         size="sm"
                         variant="primary"
@@ -323,78 +347,94 @@ export function KeychainSection() {
                       >
                         Allow run
                       </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => answer(a.id, "decline")}
-                      >
-                        Decline
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => answer(a.id, "standing")}
-                      >
-                        Allow 7 days
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => answer(a.id, "once")}
-                      >
-                        Allow once
-                      </Button>
-                    </>
-                  )
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => answer(a.id, "standing")}
+                        >
+                          7 days
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => answer(a.id, "once")}
+                        >
+                          Allow once
+                        </Button>
+                      </>
+                    )}
+                  </>
                 }
               />
             ))}
           </SettingCard>
-          <SettingsHint>
-            Allow once covers one call. Allow run covers one script.
-          </SettingsHint>
         </>
       )}
 
-      {waiting.length > 0 && (
+      {data.credentials.length === 0 ? (
+        <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl px-6 py-12 text-center">
+          <span className="flex size-12 items-center justify-center rounded-xl bg-raised text-dim">
+            <IconKey size={24} />
+          </span>
+          <div className="text-item-title font-semibold text-fg">
+            No credentials yet
+          </div>
+          <p className="m-0 max-w-sm text-supporting text-dim">
+            Add a test login or an API key that sessions can borrow.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" onClick={() => setAdding("login")}>
+              Add login
+            </Button>
+            <Button size="sm" onClick={() => setAdding("api")}>
+              Add API key
+            </Button>
+          </div>
+        </div>
+      ) : (
         <>
-          <SettingsGroupLabel>Your pending requests</SettingsGroupLabel>
-          <SettingCard>
-            {waiting.map((a) => (
-              <SettingRow
-                key={a.id}
-                title={`${byId.get(a.credentialId)?.service ?? a.credentialId} · waiting on ${a.owner}`}
-                desc={`${a.requestedMode} · ${a.purpose}`}
-                control={null}
-              />
-            ))}
-          </SettingCard>
+          {mine.length > 0 && (
+            <>
+              <SettingsGroupLabel>Yours</SettingsGroupLabel>
+              <SettingCard>{mine.map(credentialRow)}</SettingCard>
+            </>
+          )}
+          {shared.length > 0 && (
+            <>
+              <SettingsGroupLabel>From teammates</SettingsGroupLabel>
+              <SettingCard>{shared.map(credentialRow)}</SettingCard>
+            </>
+          )}
         </>
       )}
 
-      {/* Only when there is one. As a page this group carried an empty
-			    state; as a section it would be a second empty block under a
-			    list most people never populate. */}
       {activeGrants.length > 0 && (
         <>
-          <SettingsGroupLabel>Active grants</SettingsGroupLabel>
+          <SettingsGroupLabel>Access</SettingsGroupLabel>
           <SettingCard>
             {activeGrants.map((g) => (
               <SettingRow
                 key={g.id}
-                title={`${byId.get(g.credentialId)?.service ?? g.credentialId} → ${g.requestedBy}`}
-                desc={`${g.mode} · expires ${new Date(g.expiresAt).toLocaleString()} · ${g.purpose}`}
+                title={
+                  <span className="flex min-w-0 items-center gap-3">
+                    <UserAvatar name={g.requestedBy} size={32} />
+                    <span className="min-w-0">
+                      <span className="block truncate">
+                        {g.requestedBy} · {serviceOf(g.credentialId)}
+                      </span>
+                      <span className="mt-0.5 block truncate text-supporting font-normal text-dim">
+                        {expiresIn(g.expiresAt)} · {g.purpose}
+                      </span>
+                    </span>
+                  </span>
+                }
                 control={
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() =>
-                      revokeKeychainGrant(g.id)
-                        .then(reload)
-                        .catch((e) => setError(e.message))
+                      void revokeKeychainGrant(g.id).then(reload).catch(fail)
                     }
                   >
                     Revoke
@@ -405,7 +445,27 @@ export function KeychainSection() {
           </SettingCard>
         </>
       )}
-    </>
+
+      {waiting.length > 0 && (
+        <>
+          <SettingsGroupLabel>Waiting on others</SettingsGroupLabel>
+          <SettingCard>
+            {waiting.map((a) => (
+              <SettingRow
+                key={a.id}
+                title={`${serviceOf(a.credentialId)} · ${a.owner}`}
+                desc={a.purpose}
+                control={null}
+              />
+            ))}
+          </SettingCard>
+        </>
+      )}
+
+      {data.credentials.length > 0 && (
+        <SettingsHint>Add only test logins.</SettingsHint>
+      )}
+    </SettingsPanel>
   );
 }
 
@@ -468,8 +528,8 @@ function AddCredentialForm({
   return (
     <>
       <Modal.Header
-        title="Add credential"
-        description="A session can borrow it with your approval. The secret is injected server-side, so the agent never sees it."
+        title="Add API key"
+        description="Sent with each call a session makes. The agent never sees it."
       />
       <form className="flex flex-col gap-5" onSubmit={submit}>
         <div className="flex flex-col gap-3">
@@ -549,14 +609,12 @@ function AddCredentialForm({
               checked={workspace}
               onCheckedChange={(v) => setWorkspace(v === true)}
             />
-            Share with the workspace: every session can use it without asking
+            Share with everyone: any session can use it without asking
           </label>
           {/* The hint belongs to this zone, so it sits inside it rather
 					    than floating between the fields and the actions. */}
           <p className="m-0 text-supporting leading-relaxed text-faint">
-            Narrow the methods and paths where you can. A grant can only reach
-            what the credential allows, so this is the ceiling on anything you
-            approve later.
+            Limits here cap anything you approve later.
           </p>
         </div>
         <Modal.Footer>
@@ -625,7 +683,7 @@ function AddLoginForm({
     <>
       <Modal.Header
         title="Add login"
-        description="A test account a session can sign in with. You approve each release, and the agent can read the password once it has it."
+        description="A test account sessions can sign in with. You approve each use."
       />
       <form className="flex flex-col gap-5" onSubmit={submit}>
         <div className="flex flex-col gap-3">

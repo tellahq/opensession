@@ -67,8 +67,7 @@ export function ProfileSection() {
         <ProfileSkeleton />
       ) : !profile.editable ? (
         <EmptyState placement="card">
-          You ({profile.user}) are not on this instance&rsquo;s roster yet. An
-          admin can add you on Settings &rsaquo; Members.
+          You are not a member yet. An admin can add you in Members.
         </EmptyState>
       ) : (
         <ProfileCard profile={profile} onChange={setProfile} />
