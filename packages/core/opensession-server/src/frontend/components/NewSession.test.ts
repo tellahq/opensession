@@ -243,7 +243,7 @@ test("the phone composer keeps its buttons concentric with the sheet corner", as
 
   expect(source).toContain("<PhoneTopBar");
   expect(source).toContain("<PhoneTopBarAction");
-  expect(source).toContain("phone:rounded-t-[calc(40px*var(--rf))]");
+  expect(source).toContain("phone:rounded-t-sheet");
   expect(classes).toContain("phone:px-[18px] phone:pb-3 phone:pt-[18px]");
 });
 

@@ -16,7 +16,7 @@ type PrStaging = NonNullable<PrDetails["staging"]>;
 /** Pointer and press. The press step also takes a hair of scale, which is what
  *  makes a 28px target feel like it answered. */
 export const SUMMARY_MARK_HOVER =
-  "hover:bg-current/26 " + "active:scale-press active:bg-current/34";
+  "hover:bg-current/22 " + "active:scale-press active:bg-current/34";
 
 /** The preview deploy of one of a workspace's other PRs, read through the
  *  session's PR API for that PR's branch. Null when it has none. */

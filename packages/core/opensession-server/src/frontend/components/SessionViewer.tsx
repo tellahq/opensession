@@ -1461,21 +1461,21 @@ export function SessionViewer({
     !forkFrom &&
     ((showReplySuggestions && replySuggestions.length > 0) ||
       quickActions.length > 0);
-  /* Unread navigation attaches to the composer (NEXT_RISE). On desktop the
-     scroll arrow joins it there, so it needs no band of its own. */
+  /* Unread navigation floats in the action band above the composer: a pill
+     at the row's end on desktop, the glass bar's last segment on a phone. */
   const nextAction =
     showNextChatButton &&
     focused &&
     (!!openNextChat || navigation.allChatsRead);
   const scrollAction = showScrollToBottom && entries.length > 0;
-  const actionBand = quickReplies || isPhone || (scrollAction && !nextAction);
+  const actionBand = quickReplies || isPhone || scrollAction || nextAction;
   const actionClearance = !actionBand
     ? undefined
     : isPhone
-      ? isPhone && quickReplies
+      ? quickReplies
         ? ACTION_WITH_REPLIES_CLEARANCE
         : ACTION_CLEARANCE
-      : scrollAction && !nextAction
+      : (scrollAction || nextAction) && !quickReplies
         ? SCROLL_ACTION_CLEARANCE
         : SUGGESTIONS_CLEARANCE;
   // Floating controls change the scroller's bottom padding. Re-pin before the

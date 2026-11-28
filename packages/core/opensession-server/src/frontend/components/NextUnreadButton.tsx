@@ -3,7 +3,6 @@ import { useNavigation } from "../hooks/useNavigation";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { availableHeldChats, type UnreadChat } from "../lib/unread-chats";
 import { LONG_PRESS_MS, LONG_PRESS_SLOP } from "../lib/sidebar-swipe";
-import { composerFlapBorder } from "../lib/composer-classes";
 import { cn } from "../ui/cn";
 import { RepoTile } from "./RepoTile";
 import { Button } from "../ui/button";
@@ -26,17 +25,27 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
   const navigating = useRef(false);
   const chats = availableHeldChats(held, unreadChats);
   const next = chats[0];
+  // Desktop: a glass pill of its own on the action row, the scroll arrow's
+  // material. Phone: the last segment of the glass action bar, so it takes
+  // the bar's 44px touch height and the bar supplies the glass.
   const surface = cn(
-    "relative min-h-[54px] min-w-0 max-w-[min(24rem,calc(50%_-_24px))] phone:max-w-[min(24rem,85%)] justify-start gap-2 border-x border-t border-b-0 bg-[var(--composer-flap-surface)] px-3.5 pt-2.5 pb-6 text-left text-label font-medium phone:min-h-[58px]",
-    composerFlapBorder,
-    // Desktop stops the tab short of the composer's centre line, where the
-    // scroll arrow sits beside it: half the row, less the arrow's half and a gap.
-    // Softer than the composer's own corner: the tab shows only ~40px above
-    // the composer, so the composer radius turned it into a half-pill. The
-    // all-corner radius replaces Button's `rounded-full` in tailwind-merge; a
-    // top-only radius would leave the pill shape winning on top.
-    "rounded-popup rounded-b-none",
+    "min-w-0 max-w-full justify-start text-left",
+    phone ? "h-11 min-h-11 px-3" : "max-w-[min(20rem,100%)]",
   );
+  const glass = (control: React.ReactNode) =>
+    phone ? (
+      control
+    ) : (
+      <span className="inline-flex min-w-0 max-w-full rounded-full bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm">
+        {control}
+      </span>
+    );
+  const repo = (name: string) => (
+    <span aria-hidden>
+      <RepoTile name={name} size={phone ? 18 : 16} />
+    </span>
+  );
+  const arrow = <IconArrowRight size={20} aria-hidden />;
 
   useEffect(() => () => clearTimeout(longPress.current), []);
 
@@ -59,33 +68,42 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
   }
 
   if (unreadChats.length === 0) {
-    return allChatsRead ? (
-      <span role="status" className={cn(surface, "flex items-center text-dim")}>
-        All read
-      </span>
-    ) : null;
+    return allChatsRead
+      ? glass(
+          <span
+            role="status"
+            className={cn(
+              "flex items-center px-3.5 text-label text-dim",
+              phone ? "h-11" : "h-8",
+            )}
+          >
+            All read
+          </span>,
+        )
+      : null;
   }
 
   // If a held destination vanishes, wait until interaction ends rather than
   // silently substituting a newly arrived thread beneath an imminent click.
   if (!next)
-    return (
+    return glass(
       <Button
         aria-disabled="true"
         variant="ghost"
-        className={cn(surface, "text-dim active:scale-100")}
+        size={phone ? "lg" : "md"}
+        className={cn(surface, "active:scale-100")}
         onPointerLeave={() => setHeld(null)}
         onBlur={() => setHeld(null)}
         onClick={() => setHeld(null)}
       >
         No longer unread
-      </Button>
+      </Button>,
     );
 
   // Name the workspace it opens; a session without one falls back to its title.
   const nextLabel = next.workspace || next.title;
 
-  return (
+  return glass(
     <Popover.Root
       open={open}
       onOpenChange={(value, details) => {
@@ -108,7 +126,15 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
         openOnHover
         delay={350}
         closeDelay={150}
-        render={<Button variant="ghost" />}
+        render={
+          <Button
+            variant="ghost"
+            size={phone ? "lg" : "md"}
+            icon={repo(next.repo)}
+            iconTone="full"
+            trailing={arrow}
+          />
+        }
         className={cn(surface, "active:scale-100")}
         aria-label={`Next unread: ${nextLabel}`}
         aria-description={
@@ -190,11 +216,7 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
           choose(next.id);
         }}
       >
-        <span aria-hidden>
-          <RepoTile name={next.repo} size={18} />
-        </span>
-        <span className="min-w-0 flex-1 truncate">{nextLabel}</span>
-        <IconArrowRight size={20} className="shrink-0" aria-hidden />
+        <span className="min-w-0 truncate">{nextLabel}</span>
       </Popover.Trigger>
       <Popover.Popup
         side="top"
@@ -275,6 +297,6 @@ export function NextUnreadButton({ phone = false }: { phone?: boolean }) {
           ))}
         </div>
       </Popover.Popup>
-    </Popover.Root>
+    </Popover.Root>,
   );
 }

@@ -236,8 +236,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                   <button
                     key={g.id}
                     className={cn(
-                      "flex w-full min-w-0 items-center gap-3 px-5 py-3.5 text-left outline-none transition-colors",
-                      "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50",
+                      "focus-ring-inset flex w-full min-w-0 items-center gap-3 px-5 py-3.5 text-left outline-none transition-colors",
                       sel?.id === g.id ? "bg-selected" : "hover:bg-hover",
                       sel && "gap-2.5 px-3 py-2.5",
                     )}

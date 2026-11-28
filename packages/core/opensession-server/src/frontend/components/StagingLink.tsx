@@ -35,11 +35,11 @@ import { useLinksInBrowserTab } from "../lib/links-in-browser-tab";
    one is in flight. */
 const LINK_BASE =
   "inline-flex items-center gap-[5px] whitespace-nowrap rounded-md border px-[11px] py-[5px] text-label font-semibold no-underline";
-const LINK_READY = "border-green/45 text-green hover:bg-green-soft";
+const LINK_READY = "border-green/40 text-green hover:bg-green-soft";
 /* A deploy is in flight. A rebuild still opens the previous deploy, so it stays
    a live link; a first build is not testable yet, so LINK_BUILDING below
    swallows the click (see onClick) on top of this. */
-const LINK_DEPLOYING = "border-yellow/45 text-yellow hover:bg-yellow/10";
+const LINK_DEPLOYING = "border-yellow/40 text-yellow hover:bg-yellow/10";
 const LINK_BUILDING = `${LINK_DEPLOYING} cursor-default opacity-55`;
 /* Nothing to link to yet: quiet, and no hover wash to imply it opens. */
 const LINK_PENDING = "border-line text-dim cursor-default";
@@ -53,9 +53,9 @@ const ICON_READY = "cursor-pointer text-green hover:bg-green-soft";
 /* Amber while a deploy is in flight. Building swallows the click (see onClick),
    so it gets no pointer; rebuilding still opens the previous deploy. */
 const ICON_BUILDING =
-  "cursor-default text-yellow opacity-72 hover:bg-yellow/13 hover:opacity-100";
+  "cursor-default text-yellow opacity-72 hover:bg-yellow/16 hover:opacity-100";
 const ICON_REBUILDING =
-  "cursor-pointer text-yellow opacity-72 hover:bg-yellow/13 hover:opacity-100";
+  "cursor-pointer text-yellow opacity-72 hover:bg-yellow/16 hover:opacity-100";
 const ICON_PENDING = "cursor-default text-dim";
 
 /* The summary card's preview mark. It leads the PR band's status row, at the

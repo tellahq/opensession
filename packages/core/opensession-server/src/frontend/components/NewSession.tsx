@@ -2208,7 +2208,7 @@ export function NewSession({
           // into, and its corner sits concentric with the pill-shaped
           // controls along its bottom edge.
           CARD_RADIUS,
-          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-[calc(40px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
+          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-sheet phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
           ASK_SURFACE,
           mode === "ask" && "before:opacity-100 after:opacity-100",
         )}

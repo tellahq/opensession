@@ -110,7 +110,7 @@ export const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 phone:size-11");
  *  the size the icon buttons' hover wash paints, so the row keeps one rhythm;
  *  44px on a phone, where the whole row is thumb-sized. */
 export const ASK_BTN_ON =
-  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:px-3.5 bg-green/16 text-green hover:bg-green/26 disabled:cursor-default disabled:opacity-50";
+  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:px-3.5 bg-green/16 text-green hover:bg-green/22 disabled:cursor-default disabled:opacity-50";
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
