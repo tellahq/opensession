@@ -48,7 +48,13 @@ import { SETTINGS_PLATE, SettingsInSheet } from "../ui/settings";
 import { PhonePage, SheetIconButton } from "../ui/sheet";
 import { PhoneTopBar, PhoneTopBarTitle } from "../ui/top-bar";
 import { Connections } from "./Connections";
-import { IconChevronLeft, IconChevronRight, IconSearch, IconX } from "./icons";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconSearch,
+  IconServer,
+  IconX,
+} from "./icons";
 import { MyAccountsPanel } from "./MyAccounts";
 import { AuditPanel } from "./settings/AuditPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
@@ -66,7 +72,10 @@ import { ReposPanel } from "./settings/ReposPanel";
 import { SandboxesPanel } from "./settings/SandboxesPanel";
 import { StoragePanel } from "./settings/StoragePanel";
 import { RunnersPanel } from "./settings/RunnersPanel";
+import { OrganizationAppIcon } from "./OrganizationAppIcon";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
+import { UserAvatar } from "./UserAvatar";
+import { useCurrentUser } from "./UserPicker";
 
 // Settings: on desktop a modal over the page it was opened from, with
 // Personal, Organization and Server tabs across the top, the tab's sections in
@@ -288,6 +297,7 @@ export function Settings({
   children?: React.ReactNode;
 }) {
   const isPhone = useIsPhone();
+  const currentUser = useCurrentUser();
   // The new layout (desktop only) makes Automations, Goals and Security
   // pages of the app, so Settings stops listing them there.
   const toolPages = useNewLayoutPref() && !isPhone;
@@ -406,6 +416,15 @@ export function Settings({
           >
             {SCOPES.map((scope) => (
               <SegmentedOption key={scope.key} value={scope.key}>
+                {scope.key === "personal" && (
+                  <UserAvatar name={currentUser} size={18} />
+                )}
+                {scope.key === "organization" && (
+                  <OrganizationAppIcon className="size-[18px] rounded-sm object-cover" />
+                )}
+                {scope.key === "server" && (
+                  <IconServer size={18} dense className="text-faint" />
+                )}
                 {scope.label}
               </SegmentedOption>
             ))}
