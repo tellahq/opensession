@@ -1,12 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   isSettingsRoute,
   isToolView,
   parseRoute,
+  routePath,
   type Route,
 } from "../lib/app-route";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { useIsPhone } from "./useIsPhone";
+
+// The page under Settings, per tab, so a reload with Settings open still
+// shows the session it was opened over.
+const BENEATH_KEY = "opensession-settings-beneath";
+
+function rememberedBeneath(): Route {
+  try {
+    return parseRoute(sessionStorage.getItem(BENEATH_KEY) || "/");
+  } catch {
+    return parseRoute("/");
+  }
+}
 
 export type RouteBeneathSettings = {
   /** What the app body renders. */
@@ -30,10 +43,17 @@ export function useRouteBeneathSettings(route: Route): RouteBeneathSettings {
     isSettingsRoute(route) &&
     !(newLayout && isToolView(route.view));
   const [beneath, setBeneath] = useState<Route>(() =>
-    // Settings loaded first (a link or a reload) opens over the home page.
-    settingsModal ? parseRoute("/") : route,
+    settingsModal ? rememberedBeneath() : route,
   );
   // Follow every page shown outside Settings, so the modal opens over it.
   if (!settingsModal && beneath !== route) setBeneath(route);
+  useEffect(() => {
+    if (settingsModal) return;
+    try {
+      sessionStorage.setItem(BENEATH_KEY, routePath(route));
+    } catch {
+      // Without session storage a reload opens Settings over the home page.
+    }
+  }, [route, settingsModal]);
   return { route: settingsModal ? beneath : route, settingsModal };
 }

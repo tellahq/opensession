@@ -694,6 +694,18 @@ describe("external navigation and canonicalization", () => {
       id: "one",
     });
   });
+
+  test("leaves the address to Settings while it is open over a page", () => {
+    const fake = fakeBrowser({ path: "/session/one" });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "settings", section: "keychain" });
+    const calls = fake.calls.length;
+
+    controller.canonicalizePath("/workspace/work-1/session/one");
+
+    expect(fake.calls.length).toBe(calls);
+    expect(fake.browser.location.pathname).toBe("/settings/keychain");
+  });
 });
 
 describe("first-mile transitions", () => {
