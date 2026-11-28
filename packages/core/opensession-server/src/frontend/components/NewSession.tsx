@@ -1771,7 +1771,7 @@ export function NewSession({
                           />
                         </span>
                       </Menu.SubmenuTrigger>
-                      <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                      <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
                         {createFromOptions.map((opt) => {
                           const selected =
                             opt.point.kind === startPoint.kind &&
@@ -1816,7 +1816,7 @@ export function NewSession({
                           />
                         </span>
                       </Menu.SubmenuTrigger>
-                      <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                      <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
                         {(
                           [
                             {
@@ -1877,7 +1877,7 @@ export function NewSession({
                           />
                         </span>
                       </Menu.SubmenuTrigger>
-                      <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                      <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
                         {sandboxChoices.map((id) => {
                           const available =
                             id === "" ||

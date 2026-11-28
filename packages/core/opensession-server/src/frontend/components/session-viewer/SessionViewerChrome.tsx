@@ -1,3 +1,12 @@
+import * as stylex from "@stylexjs/stylex";
+import {
+  color,
+  controlHeight,
+  corner,
+  geometry,
+  radius,
+  space,
+} from "../../ui/tokens.stylex";
 import type { TabStripPlacement } from "../../lib/split-tabs";
 import type { useSessionModelWorkflowController } from "../../hooks/useSessionModelWorkflowController";
 import { HuddleButton, huddleTarget } from "../huddle/HuddleButton";
@@ -76,7 +85,13 @@ import { KeepInSidebarIcon } from "../sidebar/KeepInSidebarMark";
 import { Button } from "../../ui/button";
 import type { ConfirmRequest } from "../../ui/confirm";
 import { CopyCheck } from "../../ui/copy";
-import { Menu, MENU_ICON, MenuLabel, MenuSubmenuArrow } from "../../ui/menu";
+import {
+  Menu,
+  MENU_ICON,
+  MenuLabel,
+  MenuSubmenuArrow,
+  MenuShortcut,
+} from "../../ui/menu";
 import { PulseDot } from "../../ui/status";
 import { Tooltip } from "../../ui/tooltip";
 import {
@@ -318,6 +333,29 @@ interface SessionViewerChromeProps {
   summaryBrowser: { frame: PanelBrowserFrame; onOpen: () => void } | null;
 }
 
+const styles = stylex.create({
+  keepGap: { marginInlineEnd: space.s6 },
+  contents: { display: "contents" },
+  diffUnderInfoBar: { "--diff-panel-top": geometry.infoBarClearance },
+  dim: { color: color.dim },
+  heroModel: {
+    display: "inline-flex",
+    minHeight: controlHeight.touch,
+    alignItems: "center",
+    paddingInline: space.s6,
+  },
+  sandboxCard: {
+    display: "flex",
+    minHeight: controlHeight.touch,
+    alignItems: "center",
+    borderRadius: radius.xxl,
+    ["cornerShape"]: corner.squircle,
+    backgroundColor: color.panel,
+    paddingInline: space.s20,
+    paddingBlock: space.s8,
+  },
+});
+
 export function SessionViewerChrome({
   identity,
   layout,
@@ -494,7 +532,7 @@ export function SessionViewerChrome({
               <Button
                 size="md"
                 variant="default"
-                className="mr-1.5 text-fg"
+                xstyle={styles.keepGap}
                 icon={<KeepInSidebarIcon />}
                 iconTone="full"
                 onClick={keepInSidebar}
@@ -582,7 +620,7 @@ export function SessionViewerChrome({
                   <MenuLabel>Archived sessions</MenuLabel>
                   <MenuSubmenuArrow />
                 </Menu.SubmenuTrigger>
-                <Menu.Popup className="min-w-menu-wide max-w-[320px]">
+                <Menu.Popup className="min-w-menu-wide">
                   <ArchivedSessionItems
                     sessions={archivedSessions}
                     onSelect={(s) => {
@@ -667,9 +705,7 @@ export function SessionViewerChrome({
               <IconGlobe size={20} className={MENU_ICON} />
               <MenuLabel>Portals</MenuLabel>
               {livePortals > 0 && (
-                <span className="shrink-0 tabular-nums text-faint">
-                  {livePortals} live
-                </span>
+                <MenuShortcut>{livePortals} live</MenuShortcut>
               )}
             </Menu.Item>
           );
@@ -992,7 +1028,7 @@ export function SessionViewerChrome({
                   // From the tab, the menu hangs below the tab's foot on
                   // the sheet rather than just under its ⋯.
                   sideOffset={menuInTab ? 8 : 6}
-                  className="min-w-menu-wide max-w-[min(300px,calc(100vw-24px))]"
+                  className="min-w-menu-wide"
                 >
                   {/* Quick session actions use the same focus, spacing, collision,
 								    and dismissal behavior as every other app menu. Each group is
@@ -1073,7 +1109,7 @@ export function SessionViewerChrome({
                 !isPhone && showReview ? (
                   <div
                     ref={setReviewSessionActionTarget}
-                    className="contents"
+                    {...stylex.props(styles.contents)}
                   />
                 ) : undefined
               }
@@ -1306,7 +1342,7 @@ export function SessionViewerChrome({
                       ) : (
                         // The Changes toolbar clears this page's taller bar
                         // (52px plus the notch); file titles add its own height.
-                        <div className="[--diff-panel-top:calc(env(safe-area-inset-top,0px)+52px)]">
+                        <div {...stylex.props(styles.diffUnderInfoBar)}>
                           <DiffPanel
                             sessionId={session.id}
                             isRunning={isBusy}
@@ -1350,7 +1386,7 @@ export function SessionViewerChrome({
                       <>
                         <div className={INFO_HERO}>
                           {session.desk ? (
-                            <IconDesk size={40} className="text-dim" />
+                            <IconDesk size={40} {...stylex.props(styles.dim)} />
                           ) : (
                             <RepoTile
                               name={session.repo || "repository"}
@@ -1396,7 +1432,7 @@ export function SessionViewerChrome({
                                 variant="hero"
                               />
                             ) : models.length > 0 ? (
-                              <span className="inline-flex min-h-11 items-center px-1.5">
+                              <span {...stylex.props(styles.heroModel)}>
                                 {metadataModelLabel(effectiveModel, models)}
                               </span>
                             ) : null}
@@ -1411,7 +1447,7 @@ export function SessionViewerChrome({
                           />
                           <div className={INFO_SUMMARY_CARD}>
                             {session.sandbox && (
-                              <div className="flex min-h-11 items-center rounded-2xl bg-panel px-5 py-2">
+                              <div {...stylex.props(styles.sandboxCard)}>
                                 <SandboxBadge
                                   sessionId={session.id}
                                   sandbox={session.sandbox}
@@ -1534,7 +1570,7 @@ export function SessionViewerChrome({
         createPortal(
           session.archived ? (
             <span role="img" aria-label="Archived" title="Archived">
-              <IconArchive size={20} className="text-dim" />
+              <IconArchive size={20} {...stylex.props(styles.dim)} />
             </span>
           ) : session.desk ? (
             deskOwner && personKey(deskOwner) !== personKey(currentUser) ? (
@@ -1547,7 +1583,7 @@ export function SessionViewerChrome({
               // 20, not the tile's 18: these 24-grid glyphs are clamped
               // at 20 (MIN_SIZE in icons.tsx) and only ink ~60% of
               // their box, so the lamp still reads smaller than a face.
-              <IconDesk size={20} className="text-dim" />
+              <IconDesk size={20} {...stylex.props(styles.dim)} />
             )
           ) : (
             <RepoTile name={session.repo || "repository"} size={18} round />

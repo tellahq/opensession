@@ -439,6 +439,10 @@ export const geometry = stylex.defineConsts({
   /** A floating list: never narrower than a short label plus its glyph, and
    *  never taller than the room the positioner reports. */
   popupMinWidth: "220px",
+  /** A menu grows to fit its rows up to this, then its labels truncate.
+   *  Pickers whose rows carry a second line (models, new-session options)
+   *  set a wider cap of their own. */
+  menuMaxWidth: "min(320px, calc(100vw - 1rem))",
   popupMaxHeight: "min(60dvh, 420px, var(--available-height))",
   /** On a phone a row is a 44px finger target, so a menu gets most of the
    *  screen before it scrolls. */
@@ -551,6 +555,8 @@ export const geometry = stylex.defineConsts({
   sessionColumn: "var(--session-col)",
   /** The reading column plus the 20px gutters a row inside it pads by. */
   sessionColumnPadded: "calc(var(--session-col) + 40px)",
+  /** Below the phone workspace page's taller bar: 52px plus the notch. */
+  infoBarClearance: "calc(env(safe-area-inset-top, 0px) + 52px)",
   /** The live status row under a running turn: 5px above and below. */
   busyRowPadBlock: "5px",
   /** A pane's waiting state: at least this tall, its copy this wide. */

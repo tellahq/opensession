@@ -539,7 +539,7 @@ export function Prs({
                 </Button>
               }
             />
-            <Menu.Popup align="end" className="max-w-[320px]">
+            <Menu.Popup align="end">
               <Menu.RadioGroup
                 value={person}
                 onValueChange={(value) => setPerson(String(value))}
@@ -585,7 +585,7 @@ export function Prs({
                 </Button>
               }
             />
-            <Menu.Popup align="end" className="max-w-[320px]">
+            <Menu.Popup align="end">
               <Menu.RadioGroup
                 value={repo}
                 onValueChange={(value) => setRepo(String(value))}

@@ -161,7 +161,7 @@ function TicketMenuBody({
           )}
           {SUB_ARROW}
         </ContextMenu.SubmenuTrigger>
-        <Menu.Popup className="max-w-[280px]">
+        <Menu.Popup>
           <PlainAssigneeItems
             assigneeId={thread.assignee?.id}
             users={users}
@@ -193,7 +193,7 @@ function TicketMenuBody({
           )}
           {SUB_ARROW}
         </ContextMenu.SubmenuTrigger>
-        <Menu.Popup className="max-h-[min(420px,70vh)] max-w-[280px]">
+        <Menu.Popup className="max-h-[min(420px,70vh)]">
           <PlainLabelItems
             labels={labels}
             labelTypes={labelTypes}

@@ -172,6 +172,9 @@ property, like the side panel plate) keep working unchanged.
    - A menu row's words are `<MenuLabel>` and a submenu row ends in
      `<MenuSubmenuArrow />` (`ui/menu`): one line, truncating.
      `hand-rolled-menu-label` counts the bare `grow` spans left.
+   - A menu is at most `geometry.menuMaxWidth` (320px, or the window less
+     1rem) wide; pickers with two-line rows (models, new-session options)
+     cap at 360. A trailing count on a row is `Menu.Shortcut`.
 
 ### Open decisions
 

@@ -66,7 +66,7 @@ export function SessionRelations({
             <IconArrowDownRight className="size-5 shrink-0" />
             <span className="tabular-nums">{workers!.length}</span>
           </Menu.Trigger>
-          <Menu.Popup align="start" className="max-w-[300px]">
+          <Menu.Popup align="start">
             {/* GroupLabel MUST live inside a Group — bare it throws Base UI
 						    error #31 and white-screens the app on open. */}
             <Menu.Group>

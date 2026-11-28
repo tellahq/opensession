@@ -746,7 +746,7 @@ export function WorkspacePane({
                 <MenuLabel>Archived sessions</MenuLabel>
                 <MenuSubmenuArrow />
               </Menu.SubmenuTrigger>
-              <Menu.Popup className="min-w-menu-wide max-w-[320px]">
+              <Menu.Popup className="min-w-menu-wide">
                 <ArchivedSessionItems
                   sessions={archivedSessions}
                   onSelect={(session) => {

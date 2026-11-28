@@ -222,7 +222,7 @@ export function Issues({ sessions, onOpenSession, topbarActionsEl }: Props) {
                 </Button>
               }
             />
-            <Menu.Popup align="end" className="max-w-[320px]">
+            <Menu.Popup align="end">
               <Menu.RadioGroup
                 value={repo}
                 onValueChange={(value) => setRepo(String(value))}

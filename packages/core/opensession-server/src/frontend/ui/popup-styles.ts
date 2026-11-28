@@ -178,6 +178,8 @@ export const popup = stylex.create({
     height: geometry.hairline,
     backgroundColor: color.line,
   },
+  /** A menu's widest: past this its row labels truncate. */
+  menuMaxWidth: { maxWidth: geometry.menuMaxWidth },
   /** A row's words: they take the row's free width and end in an ellipsis
    *  rather than wrapping, so every row stays one line tall. */
   label: {

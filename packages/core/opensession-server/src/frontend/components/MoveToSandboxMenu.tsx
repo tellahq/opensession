@@ -190,7 +190,7 @@ export function MoveToSandboxMenu({
         <MenuLabel>{current ? "Move session" : "Move to Sandbox"}</MenuLabel>
         <MenuSubmenuArrow />
       </Menu.SubmenuTrigger>
-      <Menu.Popup className="max-w-[300px]">
+      <Menu.Popup>
         {current && (
           <Menu.Item
             onClick={pickHost}

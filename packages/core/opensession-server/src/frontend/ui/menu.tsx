@@ -164,6 +164,7 @@ function Popup({
             [
               popup.surface,
               aside ? popup.withAside : footer ? popup.withFooter : null,
+              !aside && popup.menuMaxWidth,
             ],
             cn(POPUP_HOOK, className),
           )}
@@ -217,7 +218,10 @@ function ContextPopup({
         {...stylex.props(popup.positioner)}
       >
         <BaseContextMenu.Popup
-          {...sx(popup.surface, cn(POPUP_HOOK, className))}
+          {...sx(
+            [popup.surface, popup.menuMaxWidth],
+            cn(POPUP_HOOK, className),
+          )}
           finalFocus={finalFocus}
         >
           <div {...stylex.props(popup.scroll)}>{children}</div>
