@@ -104,6 +104,8 @@ export const color = stylex.defineConsts({
   /** A settings group's plate: lighter than `raised`, held by a soft edge. */
   settingsPlate: "var(--settings-plate)",
   settingsPlateEdge: "var(--settings-plate-edge)",
+  settingsCanvas: "var(--settings-canvas)",
+  settingsNav: "var(--settings-nav)",
   /** `line` at a third: closes a block's shape without reading as a rule. */
   dividerSoft: "var(--divider-soft)",
   /** A control over an image: white in both themes. */

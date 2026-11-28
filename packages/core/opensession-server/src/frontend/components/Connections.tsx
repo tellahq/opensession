@@ -13,7 +13,7 @@ import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
 import { Modal } from "../ui/modal";
 import { Segmented, SegmentedOption } from "../ui/segmented";
-import { InlineAlert } from "../ui/state";
+import { EmptyState, InlineAlert } from "../ui/state";
 import { PulseDot } from "../ui/status";
 import {
   SettingCard,
@@ -344,142 +344,148 @@ export function Connections() {
           >
             MCP servers
           </SectionHeading>
-          <SettingCard>
-            {data.mcpServers.map((s) => {
-              const meta = STATUS_META[s.status];
-              const restricted = !!s.allowedUsers?.length;
-              return (
-                <div
-                  key={s.name}
-                  className="group flex items-start gap-3 px-5 py-3 transition-colors hover:bg-hover"
-                >
-                  <IconTile name={s.name} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-item-title font-medium text-fg">
-                        {displayName(s.name)}
-                      </span>
-                      {restricted && (
-                        <span
-                          className="flex flex-shrink-0 items-center gap-1 rounded-full bg-active px-1.5 py-0.5 text-meta font-medium text-dim"
-                          title={`Only these people's sessions get this server: ${s.allowedUsers!.join(", ")}`}
-                        >
-                          <LockIcon /> {s.allowedUsers!.join(", ")}
+          {data.mcpServers.length === 0 ? (
+            <EmptyState placement="card">No servers yet.</EmptyState>
+          ) : (
+            <SettingCard>
+              {data.mcpServers.map((s) => {
+                const meta = STATUS_META[s.status];
+                const restricted = !!s.allowedUsers?.length;
+                return (
+                  <div
+                    key={s.name}
+                    className="group flex items-start gap-3 px-5 py-3 transition-colors hover:bg-hover"
+                  >
+                    <IconTile name={s.name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-item-title font-medium text-fg">
+                          {displayName(s.name)}
                         </span>
-                      )}
-                      {oauthByName[s.name]?.shared ||
-                      oauthByName[s.name]?.users.length ? (
-                        <span
-                          className="flex flex-shrink-0 items-center gap-1 rounded-full bg-active px-1.5 py-0.5 text-meta font-medium text-green"
-                          title={[
-                            oauthByName[s.name]?.shared
-                              ? `Workspace grant${oauthByName[s.name]!.shared!.connectedBy ? ` (by ${oauthByName[s.name]!.shared!.connectedBy})` : ""}`
-                              : null,
-                            oauthByName[s.name]!.users.length
-                              ? `Personal: ${oauthByName[s.name]!.users.join(", ")}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        >
-                          OAuth
-                          {oauthByName[s.name]?.shared ? " · workspace" : ""}
-                          {oauthByName[s.name]!.users.length
-                            ? ` · ${oauthByName[s.name]!.users.join(", ")}`
-                            : ""}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="truncate text-label text-dim">
-                      {MCP_BLURBS.get(s.name) || "MCP server"}
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-1.5 text-meta text-faint">
-                      <span className="rounded-xs bg-active px-1.5 py-px">
-                        {s.transport}
-                      </span>
-                      <span className="truncate" title={s.target}>
-                        {s.target}
-                      </span>
-                    </div>
-                    {meta.bad && s.detail && (
-                      <div
-                        className="mt-1 truncate text-meta text-red"
-                        title={s.detail}
-                      >
-                        {s.detail}
+                        {restricted && (
+                          <span
+                            className="flex flex-shrink-0 items-center gap-1 rounded-full bg-active px-1.5 py-0.5 text-meta font-medium text-dim"
+                            title={`Only these people's sessions get this server: ${s.allowedUsers!.join(", ")}`}
+                          >
+                            <LockIcon /> {s.allowedUsers!.join(", ")}
+                          </span>
+                        )}
+                        {oauthByName[s.name]?.shared ||
+                        oauthByName[s.name]?.users.length ? (
+                          <span
+                            className="flex flex-shrink-0 items-center gap-1 rounded-full bg-active px-1.5 py-0.5 text-meta font-medium text-green"
+                            title={[
+                              oauthByName[s.name]?.shared
+                                ? `Workspace grant${oauthByName[s.name]!.shared!.connectedBy ? ` (by ${oauthByName[s.name]!.shared!.connectedBy})` : ""}`
+                                : null,
+                              oauthByName[s.name]!.users.length
+                                ? `Personal: ${oauthByName[s.name]!.users.join(", ")}`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          >
+                            OAuth
+                            {oauthByName[s.name]?.shared ? " · workspace" : ""}
+                            {oauthByName[s.name]!.users.length
+                              ? ` · ${oauthByName[s.name]!.users.join(", ")}`
+                              : ""}
+                          </span>
+                        ) : null}
                       </div>
-                    )}
-                  </div>
-                  <StatusChip label={meta.label} dot={meta.dot} />
-                  <Menu.Root>
-                    <Menu.Trigger
-                      className={cn(
-                        rowMenuTriggerClasses,
-                        "opacity-0 transition-[color,opacity,background] group-hover:opacity-100 data-[popup-open]:opacity-100",
+                      <div className="truncate text-label text-dim">
+                        {MCP_BLURBS.get(s.name) || "MCP server"}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-meta text-faint">
+                        <span className="rounded-xs bg-active px-1.5 py-px">
+                          {s.transport}
+                        </span>
+                        <span className="truncate" title={s.target}>
+                          {s.target}
+                        </span>
+                      </div>
+                      {meta.bad && s.detail && (
+                        <div
+                          className="mt-1 truncate text-meta text-red"
+                          title={s.detail}
+                        >
+                          {s.detail}
+                        </div>
                       )}
-                      aria-label={`Manage ${s.name}`}
-                    >
-                      <IconDotsHorizontal size={20} />
-                    </Menu.Trigger>
-                    <Menu.Popup align="end" sideOffset={4}>
-                      {(s.transport === "http" ||
-                        oauthByName[s.name]?.capable) && (
-                        <>
-                          <Menu.Item
-                            onClick={() => handleOauthConnect(s, "shared")}
-                          >
-                            <IconPlus size={20} className="text-faint" />
-                            {oauthByName[s.name]?.shared
-                              ? "Reconnect (workspace)"
-                              : "Connect (workspace)"}
-                          </Menu.Item>
-                          <Menu.Item
-                            onClick={() => handleOauthConnect(s, "me")}
-                          >
-                            <IconPlus size={20} className="text-faint" />
-                            Connect my account
-                          </Menu.Item>
-                          {s.transport === "http" &&
-                          oauthByName[s.name]?.manualToken ? (
-                            <Menu.Item onClick={() => setTokenConnect(s)}>
-                              <IconPlus size={20} className="text-faint" />
-                              Connect with API token
-                            </Menu.Item>
-                          ) : null}
-                          {oauthByName[s.name]?.shared ||
-                          oauthByName[s.name]?.users.length ? (
-                            <Menu.Item
-                              onClick={() =>
-                                handleOauthDisconnect(
-                                  s,
-                                  oauthByName[s.name]?.shared ? "shared" : "me",
-                                )
-                              }
-                            >
-                              <IconTrash size={20} className="text-faint" />
-                              Disconnect OAuth
-                            </Menu.Item>
-                          ) : null}
-                          <Menu.Separator />
-                        </>
-                      )}
-                      <Menu.Item onClick={() => handleRestrict(s)}>
-                        <IconSliders size={20} className="text-faint" />
-                        {restricted ? "Edit access" : "Restrict access"}
-                      </Menu.Item>
-                      <Menu.Item
-                        onClick={() => handleRemove(s.name)}
-                        className="text-red data-[highlighted]:bg-red-soft"
+                    </div>
+                    <StatusChip label={meta.label} dot={meta.dot} />
+                    <Menu.Root>
+                      <Menu.Trigger
+                        className={cn(
+                          rowMenuTriggerClasses,
+                          "opacity-0 transition-[color,opacity,background] group-hover:opacity-100 data-[popup-open]:opacity-100",
+                        )}
+                        aria-label={`Manage ${s.name}`}
                       >
-                        <IconTrash size={20} />
-                        Remove server
-                      </Menu.Item>
-                    </Menu.Popup>
-                  </Menu.Root>
-                </div>
-              );
-            })}
-          </SettingCard>
+                        <IconDotsHorizontal size={20} />
+                      </Menu.Trigger>
+                      <Menu.Popup align="end" sideOffset={4}>
+                        {(s.transport === "http" ||
+                          oauthByName[s.name]?.capable) && (
+                          <>
+                            <Menu.Item
+                              onClick={() => handleOauthConnect(s, "shared")}
+                            >
+                              <IconPlus size={20} className="text-faint" />
+                              {oauthByName[s.name]?.shared
+                                ? "Reconnect (workspace)"
+                                : "Connect (workspace)"}
+                            </Menu.Item>
+                            <Menu.Item
+                              onClick={() => handleOauthConnect(s, "me")}
+                            >
+                              <IconPlus size={20} className="text-faint" />
+                              Connect my account
+                            </Menu.Item>
+                            {s.transport === "http" &&
+                            oauthByName[s.name]?.manualToken ? (
+                              <Menu.Item onClick={() => setTokenConnect(s)}>
+                                <IconPlus size={20} className="text-faint" />
+                                Connect with API token
+                              </Menu.Item>
+                            ) : null}
+                            {oauthByName[s.name]?.shared ||
+                            oauthByName[s.name]?.users.length ? (
+                              <Menu.Item
+                                onClick={() =>
+                                  handleOauthDisconnect(
+                                    s,
+                                    oauthByName[s.name]?.shared
+                                      ? "shared"
+                                      : "me",
+                                  )
+                                }
+                              >
+                                <IconTrash size={20} className="text-faint" />
+                                Disconnect OAuth
+                              </Menu.Item>
+                            ) : null}
+                            <Menu.Separator />
+                          </>
+                        )}
+                        <Menu.Item onClick={() => handleRestrict(s)}>
+                          <IconSliders size={20} className="text-faint" />
+                          {restricted ? "Edit access" : "Restrict access"}
+                        </Menu.Item>
+                        <Menu.Item
+                          onClick={() => handleRemove(s.name)}
+                          className="text-red data-[highlighted]:bg-red-soft"
+                        >
+                          <IconTrash size={20} />
+                          Remove server
+                        </Menu.Item>
+                      </Menu.Popup>
+                    </Menu.Root>
+                  </div>
+                );
+              })}
+            </SettingCard>
+          )}
 
           <ProjectsSection />
         </>

@@ -207,6 +207,13 @@
   /* The plate's outline. A host that lays settings straight on its own
 	   surface (the desktop Settings window) clears both to transparent. */
   --settings-plate-edge: var(--divider-soft);
+  /* The desktop Settings window, as Granola lays it out: each group is a
+	   card that stands up off a slightly sunken page, so a page reads as a few
+	   sections at a glance. */
+  --settings-canvas: var(--bg);
+  --settings-nav: var(--sidebar-bg);
+  --settings-card: #252525;
+  --settings-card-edge: rgba(255, 255, 255, 0.06);
   /* Interaction washes. --bg-hover/--bg-active above are absolute *surfaces*:
 	   used as a hover they land as a ~9% step on --bg but barely 2% on
 	   --bg-panel, so the same token gives a heavy wash on the composer and an
@@ -655,6 +662,10 @@ html[data-theme="light"] {
 	   of rows loses its edge at it. Seven units, so a group still reads as a
 	   surface while the page around it stays white. */
   --settings-plate: #f8f8f8;
+  --settings-canvas: #f7f7f6;
+  --settings-nav: #f1f1f0;
+  --settings-card: #ffffff;
+  --settings-card-edge: rgba(0, 0, 0, 0.075);
   /* Neutral black ink; a touch lighter than dark's wash because ink on white
 	   reads heavier than the same alpha of white on charcoal. */
   --hover: rgba(0, 0, 0, 0.055);

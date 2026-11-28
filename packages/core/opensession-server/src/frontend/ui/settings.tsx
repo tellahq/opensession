@@ -516,8 +516,8 @@ const styles = stylex.create({
     rowGap: space.s6,
     paddingInline: space.s20,
     fontSize: text.label,
-    fontWeight: weight.heading,
-    color: color.faint,
+    fontWeight: weight.medium,
+    color: color.dim,
   },
   groupActions: {
     display: "flex",
