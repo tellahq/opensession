@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isUnread, mergeReadMaps } from "./reads";
+import { isUnread, mergeReadMaps, readsForUnread } from "./reads";
 
 test("read hydration merges persisted server and local marks", () => {
   expect(
@@ -50,4 +50,42 @@ test("a session is unread only after its turn finishes", () => {
   expect(isUnread(session, reads)).toBe(false);
   expect(isUnread({ ...session, isRunning: false }, reads)).toBe(true);
   expect(isUnread({ ...session, isRunning: false }, {})).toBe(false);
+});
+
+test("a mark that flips no unread flag keeps the previous read map", () => {
+  const sessions = [
+    { id: "open", lastActivity: "2026-08-11T12:00:00.000Z", isRunning: false },
+    {
+      id: "running",
+      lastActivity: "2026-08-11T12:00:00.000Z",
+      isRunning: true,
+    },
+  ];
+  const previous = {
+    open: "2026-08-11T12:00:00.000Z",
+    running: "2026-08-11T10:00:00.000Z",
+  };
+  expect(
+    readsForUnread(sessions, previous, {
+      ...previous,
+      running: "2026-08-11T11:00:00.000Z",
+      offscreen: "2026-08-11T11:00:00.000Z",
+    }),
+  ).toBe(previous);
+  const flipped = { ...previous, open: "2026-08-11T11:00:00.000Z" };
+  expect(readsForUnread(sessions, previous, flipped)).toBe(flipped);
+});
+
+test("a stale map is replaced once newer activity would read differently", () => {
+  const previous = { open: "2026-08-11T11:00:00.000Z" };
+  const next = { open: "2026-08-11T12:00:00.000Z" };
+  const before = [
+    { id: "open", lastActivity: "2026-08-11T11:00:00.000Z", isRunning: false },
+  ];
+  const after = [
+    { id: "open", lastActivity: "2026-08-11T12:00:00.000Z", isRunning: false },
+  ];
+  expect(readsForUnread(before, previous, next)).toBe(previous);
+  expect(readsForUnread(after, previous, next)).toBe(next);
+  expect(readsForUnread(after, null, next)).toBe(next);
 });
