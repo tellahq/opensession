@@ -38,6 +38,10 @@ const BUDGET_FILE = join(import.meta.dir, "ui-audit-budget.json");
 const RADIUS_SCALE = new Set([2, 4, 7, 12, 14, 16, 18, 22]);
 /** Tint steps for a translucent hue (`bg-green/10`); see styles/tailwind.css. */
 const TINT_SCALE = new Set([6, 10, 16, 22, 34, 40]);
+/** Spacing steps (x4px) matching StyleX `space` in ui/tokens.stylex.ts. */
+const SPACING_STEPS = new Set([
+  0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 8, 10, 12,
+]);
 
 const TAILWIND_CSS = readFileSync(
   join(FRONTEND, "styles/tailwind.css"),
@@ -525,6 +529,29 @@ const SIGNALS: Signal[] = [
         stripComments(source),
         /(?<![\w-])(?:size|w|h|min-w|max-w|min-h|max-h)-\[[0-9.]+(?:px|rem|em)\]/g,
       ),
+  },
+  {
+    id: "off-scale-spacing",
+    instead:
+      "the spacing scale, StyleX `space`: 0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 8, 10, 12 (0 to 48px), or `px` for a hairline",
+    exempt: ["styles/"],
+    count: (source) => {
+      const code = stripComments(source);
+      const property =
+        "(?:p[xytrblse]?|m[xytrblse]?|gap(?:-[xy])?|space-[xy]|inset(?:-[xy])?|top|right|bottom|left|start|end|scroll-[pm][xytrblse]?)";
+      let n = occurrences(
+        code,
+        new RegExp(`(?<![\\w\\[-])-?${property}-\\[-?[0-9.]+px\\]`, "g"),
+      );
+      for (const match of code.matchAll(
+        new RegExp(
+          `(?<![\\w\\[-])-?${property}-(\\d+(?:\\.\\d+)?)(?![\\w.\\[/-])`,
+          "g",
+        ),
+      ))
+        if (!SPACING_STEPS.has(Number(match[1]))) n++;
+      return n;
+    },
   },
   {
     id: "arbitrary-shadow",
