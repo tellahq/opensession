@@ -4,6 +4,7 @@ import { archiveSessionApi, deleteSessionApi } from "../lib/api";
 import type { ActiveViewTab } from "../lib/active-view-tab";
 import type { Route } from "../lib/app-route";
 import { sessionNeverRan } from "../lib/landing-session";
+import { neighbourTab } from "../lib/tab-order";
 import type { OpenNextSidebarItem } from "../lib/sidebar-types";
 import type { UnifiedSession } from "../lib/types";
 import type { WorkspacePaneTab } from "../lib/workspace-pane-tabs";
@@ -14,6 +15,8 @@ type SessionLifecycleParams = {
   goBack: () => void;
   currentSession: UnifiedSession | null;
   workspaceSessions: UnifiedSession[];
+  /** Left-to-right ids of the tab bar holding a session, panes included. */
+  tabOrderFor: (sessionId: string) => string[];
   activeWorkspaceId: string | null;
   openWsPanes: WorkspacePaneTab[];
   activeViewTab: ActiveViewTab;
@@ -50,6 +53,7 @@ export function useSessionLifecycle({
   goBack,
   currentSession,
   workspaceSessions,
+  tabOrderFor,
   activeWorkspaceId,
   openWsPanes,
   activeViewTab,
@@ -88,6 +92,11 @@ export function useSessionLifecycle({
   // nothing to recover, so it's deleted outright instead of cluttering
   // Archived. The local list updates before the request returns so closing
   // feels instant. Shared by the tab ×, the tab context menu, and ⌘W.
+  /** The open workspace pane a strip tab id stands for, if it is one. */
+  const paneOfTab = (id: string): WorkspacePaneTab | null =>
+    (activeWorkspaceId &&
+      openWsPanes.find((pane) => id.startsWith(`${pane}:`))) ||
+    null;
   const closeSessionNow = async (
     s: UnifiedSession,
     preferredNext?: UnifiedSession,
@@ -99,16 +108,34 @@ export function useSessionLifecycle({
     // resolves without it, and collapses on its own once a bar is emptied.
     // Leaving the id in the record means restoring the session later puts it
     // back in the bar it was closed from.
-    const next = wasOpen
-      ? (preferredNext ?? workspaceSessions.find((c) => c.id !== s.id))
-      : null;
+    // The tab beside it takes over, right first, like a browser: closing the
+    // fifth tab lands on the sixth (or the fourth), not back on the first. A
+    // workspace pane next to it counts; the closing session's own panes don't.
+    const neighbourId =
+      wasOpen && !preferredNext
+        ? neighbourTab(
+            tabOrderFor(s.id),
+            s.id,
+            (id) =>
+              (id !== s.id && workspaceSessions.some((c) => c.id === id)) ||
+              !!paneOfTab(id),
+          )
+        : null;
+    const neighbourPane = neighbourId ? paneOfTab(neighbourId) : null;
+    const next =
+      wasOpen && !neighbourPane
+        ? (preferredNext ??
+          workspaceSessions.find((c) => c.id === neighbourId) ??
+          workspaceSessions.find((c) => c.id !== s.id))
+        : null;
     // Closing the last session doesn't have to conjure a new one: a workspace
     // pane (Review, Conversation, Video) renders without a session, so the
     // strip is left holding just that tab. The foregrounded pane wins, so
     // closing the session you were reading Review beside stays on Review.
     const survivingPane =
       wasOpen && !next && activeWorkspaceId
-        ? (openWsPanes.find((pane) => pane === activeViewTab) ??
+        ? (neighbourPane ??
+          openWsPanes.find((pane) => pane === activeViewTab) ??
           openWsPanes[0] ??
           null)
         : null;
@@ -176,8 +203,17 @@ export function useSessionLifecycle({
     cleanWorktree: boolean,
   ) => {
     const wasOpen = currentSession?.id === session.id;
+    const neighbourId = wasOpen
+      ? neighbourTab(
+          tabOrderFor(session.id),
+          session.id,
+          (id) =>
+            id !== session.id && workspaceSessions.some((c) => c.id === id),
+        )
+      : null;
     const next = wasOpen
-      ? workspaceSessions.find((candidate) => candidate.id !== session.id)
+      ? (workspaceSessions.find((c) => c.id === neighbourId) ??
+        workspaceSessions.find((candidate) => candidate.id !== session.id))
       : undefined;
     await deleteSessionApi(session.id, cleanWorktree);
     remove(session.id);

@@ -30,6 +30,24 @@ export function appendNewTabs(
   return [...previous.filter((id) => currentSet.has(id)), ...added];
 }
 
+/**
+ * The tab that takes over when `closingId` closes: the nearest one to its right
+ * that `canOpen` accepts, else the nearest to its left, the way a browser lands
+ * on the neighbouring tab rather than jumping back to the first.
+ */
+export function neighbourTab(
+  ids: readonly string[],
+  closingId: string,
+  canOpen: (id: string) => boolean,
+): string | null {
+  const at = ids.indexOf(closingId);
+  if (at < 0) return null;
+  for (let i = at + 1; i < ids.length; i++)
+    if (canOpen(ids[i]!)) return ids[i]!;
+  for (let i = at - 1; i >= 0; i--) if (canOpen(ids[i]!)) return ids[i]!;
+  return null;
+}
+
 function read(): OrderMap {
   try {
     const parsed = orderMapSchema.safeParse(
