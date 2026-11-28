@@ -59,8 +59,8 @@ export function PrChecksPage({
 
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-surface">
-      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-6 py-6">
-        <header className="flex items-center gap-3 px-1">
+      <div className="flex w-full flex-col gap-6 py-6">
+        <header className="flex items-center gap-3 px-6">
           {summary.total > 0 && (
             <span
               className={cn(
@@ -94,10 +94,10 @@ export function PrChecksPage({
         </header>
         {groups.map((group) => (
           <section key={group.name} className="flex flex-col gap-2">
-            <h3 className="m-0 px-1 text-supporting font-semibold text-dim">
+            <h3 className="m-0 px-6 text-supporting font-semibold text-dim">
               {group.name}
             </h3>
-            <ul className="m-0 list-none divide-y divide-divider overflow-hidden rounded-xl border border-line/60 bg-surface p-0 smooth-shadow-sm">
+            <ul className="m-0 list-none divide-y divide-divider overflow-hidden border-y border-divider p-0">
               {group.checks.map((check, index) => (
                 <CheckItem key={`${check.name}:${index}`} check={check} />
               ))}
@@ -165,7 +165,7 @@ function CheckItem({ check }: { check: PrCheck }) {
     <li>
       {check.url ? (
         <a
-          className="group flex min-w-0 items-center gap-3 px-4 py-2.5 text-inherit no-underline hover:bg-hover"
+          className="group flex min-w-0 items-center gap-3 px-6 py-2.5 text-inherit no-underline hover:bg-hover"
           href={check.url}
           target="_blank"
           rel="noopener"
@@ -173,7 +173,7 @@ function CheckItem({ check }: { check: PrCheck }) {
           {row}
         </a>
       ) : (
-        <div className="flex min-w-0 items-center gap-3 px-4 py-2.5">{row}</div>
+        <div className="flex min-w-0 items-center gap-3 px-6 py-2.5">{row}</div>
       )}
     </li>
   );

@@ -62,7 +62,7 @@ export function MergeBox({
           ? "w-[440px] min-w-0 max-w-full"
           : // The conversation's own measure, so the box and the description
             // under it share both edges.
-            "mx-auto w-full min-w-0 max-w-[760px] overflow-hidden rounded-xl bg-panel"
+            "mx-auto w-full min-w-0 max-w-[760px] overflow-hidden rounded-xl bg-panel new-layout:mx-0 new-layout:max-w-none new-layout:rounded-none new-layout:border-y new-layout:border-divider new-layout:bg-transparent"
       }
     >
       <div className="flex items-center gap-3 px-4 py-3.5">

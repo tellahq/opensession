@@ -328,7 +328,15 @@ test("the PR top bar leaves merge to the summary and actions menu", () => {
   expect(headerStart).toBeGreaterThan(-1);
   expect(menuStart).toBeGreaterThan(-1);
   const headerEnd = prPanelSource.indexOf("</TopBar>", headerStart);
-  expect(prPanelSource.slice(headerStart, headerEnd)).toContain("{prActions}");
+  // Both bars (old and new layout) render the shared trailing controls.
+  expect(prPanelSource.slice(headerStart, headerEnd)).toContain("{barActions}");
+  const barActionsStart = prPanelSource.indexOf("const barActions");
+  expect(
+    prPanelSource.slice(
+      barActionsStart,
+      prPanelSource.indexOf("</>", barActionsStart),
+    ),
+  ).toContain("{prActions}");
   expect(prPanelSource.slice(headerStart, headerEnd)).not.toContain(
     "Squash and merge",
   );

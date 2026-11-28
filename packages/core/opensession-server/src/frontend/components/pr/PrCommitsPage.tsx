@@ -27,7 +27,7 @@ export function PrCommitsPage({
   const days = prCommitDays(pr.commits ?? []);
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-surface">
-      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-6 py-6">
+      <div className="flex w-full flex-col gap-6 py-6">
         {days.length === 0 && (
           <p className="m-0 py-10 text-center text-supporting text-faint">
             No commits yet.
@@ -35,13 +35,13 @@ export function PrCommitsPage({
         )}
         {days.map((day) => (
           <section key={day.label || "undated"} className="flex flex-col gap-2">
-            <h2 className="m-0 flex items-center gap-2 px-1 text-supporting font-normal text-dim">
+            <h2 className="m-0 flex items-center gap-2 px-6 text-supporting font-normal text-dim">
               <span className="inline-flex text-faint">
                 <CommitIcon />
               </span>
               {day.label ? `Commits on ${day.label}` : "Commits"}
             </h2>
-            <ol className="m-0 list-none divide-y divide-divider overflow-hidden rounded-xl border border-line/60 bg-surface p-0 smooth-shadow-sm">
+            <ol className="m-0 list-none divide-y divide-divider overflow-hidden border-y border-divider p-0">
               {day.commits.map((commit) => (
                 <CommitRow
                   key={commit.oid}
@@ -77,7 +77,7 @@ function CommitRow({
       ? `${pr.url}/commits/${commit.oid}`
       : undefined;
   return (
-    <li className="group flex min-w-0 items-start gap-3 px-4 py-3 hover:bg-hover">
+    <li className="group flex min-w-0 items-start gap-3 px-6 py-3 hover:bg-hover">
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           {href ? (

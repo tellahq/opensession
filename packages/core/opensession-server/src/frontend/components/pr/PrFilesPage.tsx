@@ -443,7 +443,7 @@ export function PrFilesPage({
           )}
           aria-label="File changes"
         >
-          <div className="px-2 pb-2 phone:px-0">
+          <div className="px-2 pb-2 phone:px-0 new-layout:px-0">
             {diffSource === "worktree" ? (
               <DiffPanel
                 sessionId={sessionId}

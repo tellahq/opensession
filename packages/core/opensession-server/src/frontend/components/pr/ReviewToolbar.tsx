@@ -20,9 +20,13 @@ export function ReviewToolbar({
 
   return (
     <>
-      <div className={`relative shrink-0 desktop:pt-2.5 ${placement}`}>
+      {/* The new layout's Review is a tab of the workspace, so its bar runs
+          edge to edge instead of floating as a card inside it. */}
+      <div
+        className={`relative shrink-0 desktop:pt-2.5 ${placement} new-layout:desktop:m-0 new-layout:desktop:p-0`}
+      >
         <div
-          className={`relative bg-surface desktop:rounded-lg desktop:smooth-shadow-ring-sm ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
+          className={`relative bg-surface desktop:rounded-lg desktop:smooth-shadow-ring-sm new-layout:desktop:rounded-none new-layout:desktop:shadow-none ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
         >
           {children}
         </div>

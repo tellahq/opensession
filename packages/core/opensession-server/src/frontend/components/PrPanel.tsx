@@ -24,6 +24,7 @@ import { DiffStat } from "./DiffStat";
 import { PrFilesPage } from "./pr/PrFilesPage";
 import { PrCommitsPage } from "./pr/PrCommitsPage";
 import { PrChecksPage } from "./pr/PrChecksPage";
+import { PrIdentityLine } from "./pr/PrIdentityLine";
 import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { FinishReviewDialog } from "./pr/FinishReviewDialog";
 import {
@@ -1241,6 +1242,8 @@ export function PrPanel({
     codeTheme,
     visibleFileOrder,
     stickyFileHeaders: true,
+    // Edge to edge in the new layout: square file rows split by hairlines.
+    flush: newLayout && !phoneLayout,
     defaultExpandedFiles: diffLoadPolicy.defaultExpandedFiles,
     allowExpandAll: diffLoadPolicy.allowExpandAll,
     viewedFiles: reviewedFiles,
@@ -2011,6 +2014,54 @@ export function PrPanel({
     </Menu.Root>
   );
 
+  // The bar's trailing controls: stack, preview, merge status, review.
+  const barActions = (
+    <>
+      {/* A stack is secondary navigation, not page content. Keep its
+              compact position/size chip in the bar and reveal the full rail
+              in the shared popover instead of spending canvas height. */}
+      {caps.stacks && pr.stack && (
+        <PrStackChip
+          pr={pr}
+          tone={statusMark.tone}
+          size="bar"
+          headline={statusMark.label}
+          repo={active?.repo}
+          onOpenPr={onOpenPr}
+        />
+      )}
+      {pr.staging?.url && !headerCompact && (
+        <Tooltip label={stagingLabel(pr.staging)}>
+          <a
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg"
+            href={pr.staging.url}
+            target="_blank"
+            rel="noopener"
+            aria-label={stagingLabel(pr.staging)}
+          >
+            <IconGlobe size={20} />
+          </a>
+        </Tooltip>
+      )}
+      {mergeStatus}
+      {canCommentOnReview(pr.state, caps.reviewComments) && (
+        <Button
+          variant="success-strong"
+          size="sm"
+          className="shrink-0"
+          onClick={() => setReviewOpen(true)}
+        >
+          Finish review
+          {pending.length > 0 ? ` (${pending.length})` : ""}
+        </Button>
+      )}
+      {sessionActionTarget === undefined &&
+        !headerCompact &&
+        sessionActionButton}
+      {prActions}
+    </>
+  );
+
   return (
     <div
       className={`selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`}
@@ -2060,6 +2111,50 @@ export function PrPanel({
               </>
             }
           />
+        ) : newLayout ? (
+          // The new layout's Review is one edge-to-edge top bar in GitHub's
+          // shape: the title large, the facts under it, then the pages.
+          <header className="shrink-0 bg-surface px-6 pt-4">
+            <div className="flex min-w-0 items-start gap-3">
+              {targetPicker}
+              <h1 className="m-0 min-w-0 flex-1 break-words text-section-title font-semibold leading-tight text-fg">
+                {pr.title}{" "}
+                <a
+                  className="font-normal text-faint no-underline hover:text-link"
+                  href={pr.url}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  #{pr.number}
+                </a>
+              </h1>
+              <div className="flex shrink-0 items-center gap-2">
+                {barActions}
+              </div>
+            </div>
+            <div className="mt-2.5">
+              <PrIdentityLine
+                pr={pr}
+                provider={provider}
+                statusMark={statusMark}
+                showSize={false}
+              />
+            </div>
+            <div className="-mx-6 mt-3 flex h-10 items-stretch gap-2 border-b border-divider px-4">
+              {pageTabs}
+              {page !== "files" ? (
+                <span className="ml-auto flex items-center pr-2">
+                  <DiffStat
+                    files={files}
+                    additions={pr.additions}
+                    deletions={pr.deletions}
+                  />
+                </span>
+              ) : (
+                fileControls
+              )}
+            </div>
+          </header>
         ) : (
           <>
             {/* GitHub's pull request bar: the number and title on the left,
@@ -2089,66 +2184,13 @@ export function PrPanel({
                   <CopyTextButton text={pr.title} label="Copy title" />
                 )}
               </h1>
-              {/* A stack is secondary navigation, not page content. Keep its
-              compact position/size chip in the bar and reveal the full rail
-              in the shared popover instead of spending canvas height. */}
-              {caps.stacks && pr.stack && (
-                <PrStackChip
-                  pr={pr}
-                  tone={statusMark.tone}
-                  size="bar"
-                  headline={statusMark.label}
-                  repo={active?.repo}
-                  onOpenPr={onOpenPr}
-                />
-              )}
-              {pr.staging?.url && !headerCompact && (
-                <Tooltip label={stagingLabel(pr.staging)}>
-                  <a
-                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg"
-                    href={pr.staging.url}
-                    target="_blank"
-                    rel="noopener"
-                    aria-label={stagingLabel(pr.staging)}
-                  >
-                    <IconGlobe size={20} />
-                  </a>
-                </Tooltip>
-              )}
-              {mergeStatus}
-              {canCommentOnReview(pr.state, caps.reviewComments) && (
-                <Button
-                  variant="success-strong"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => setReviewOpen(true)}
-                >
-                  Finish review
-                  {pending.length > 0 ? ` (${pending.length})` : ""}
-                </Button>
-              )}
-              {sessionActionTarget === undefined &&
-                !headerCompact &&
-                sessionActionButton}
-              {prActions}
+              {barActions}
             </TopBar>
             {/* The pages as GitHub's underline tabs, with the Files page's
             own controls at the row's far end. */}
             <div className="flex h-10 shrink-0 items-stretch gap-2 border-t border-divider px-4">
               {pageTabs}
-              {/* Off the code page the row's end carries the PR's size, as
-              GitHub's tab row does. */}
-              {newLayout && page !== "files" ? (
-                <span className="ml-auto flex items-center">
-                  <DiffStat
-                    files={files}
-                    additions={pr.additions}
-                    deletions={pr.deletions}
-                  />
-                </span>
-              ) : (
-                fileControls
-              )}
+              {fileControls}
             </div>
           </>
         )}
