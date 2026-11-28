@@ -559,6 +559,8 @@ export const geometry = stylex.defineConsts({
   sessionColumnPadded: "calc(var(--session-col) + 40px)",
   /** The pinned prompt pill: one line, at most 480px or 70% of the column. */
   stickyPromptMaxWidth: "min(480px, 70%)",
+  /** Just below a phone pane's floating header and its docked tab strip. */
+  belowPaneHeader: "calc(var(--pane-header-h) + var(--strip-clearance, 0px))",
   /** Below the phone workspace page's taller bar: 52px plus the notch. */
   infoBarClearance: "calc(env(safe-area-inset-top, 0px) + 52px)",
   /** The live status row under a running turn: 5px above and below. */

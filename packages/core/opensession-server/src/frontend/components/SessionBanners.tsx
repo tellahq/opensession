@@ -1,8 +1,67 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
-import { SESSION_BANNER, SESSION_BANNERS } from "../lib/session-viewer-classes";
+import * as stylex from "@stylexjs/stylex";
 import { Button } from "../ui/button";
+import {
+  color,
+  controlHeight,
+  geometry,
+  media,
+  radius,
+  space,
+  text,
+} from "../ui/tokens.stylex";
 import { IconClock } from "./icons";
+
+const styles = stylex.create({
+  /** The strip under the session header. On a phone the header floats over
+   *  the column, so an in-flow row would hide under it: the strip pins under
+   *  the header (and the docked tab strip, when shown) instead. */
+  strip: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: space.s8,
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: color.divider,
+    backgroundColor: color.raised,
+    paddingInline: { default: space.s16, [media.phone]: space.s12 },
+    paddingBlock: space.s6,
+    position: { default: null, [media.phone]: "absolute" },
+    insetInline: { default: null, [media.phone]: 0 },
+    top: { default: null, [media.phone]: geometry.belowPaneHeader },
+    zIndex: { default: null, [media.phone]: 5 },
+  },
+  /** One notice: a small control's height, one truncating line. */
+  chip: {
+    display: "inline-flex",
+    maxWidth: "100%",
+    minHeight: controlHeight.sm,
+    alignItems: "center",
+    gap: space.s6,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: color.line,
+    backgroundColor: color.panel,
+    paddingInline: space.s12,
+    fontSize: text.label,
+    color: color.dim,
+  },
+  /** The loop's chip ends in its Stop button, so it closes tighter. */
+  loopChip: { gap: space.s8, paddingInlineEnd: space.s4 },
+  fixed: { flexShrink: 0 },
+  schedule: { flexShrink: 0, color: color.fg },
+  prompt: {
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+});
 
 type SessionLoop = NonNullable<UnifiedSession["loop"]>;
 
@@ -31,18 +90,15 @@ export function SessionLoopBanner({
 }) {
   const [stopping, setStopping] = useState(false);
   return (
-    <span
-      className={`${SESSION_BANNER} gap-2 pr-1 text-dim`}
-      title={loop.prompt}
-    >
-      <IconClock size={16} dense className="shrink-0" />
-      <span className="shrink-0 text-fg">{loopScheduleLabel(loop)}</span>
-      <span className="min-w-0 truncate">{loop.prompt}</span>
+    <span {...stylex.props(styles.chip, styles.loopChip)} title={loop.prompt}>
+      <IconClock size={16} dense {...stylex.props(styles.fixed)} />
+      <span {...stylex.props(styles.schedule)}>{loopScheduleLabel(loop)}</span>
+      <span {...stylex.props(styles.prompt)}>{loop.prompt}</span>
       {onStop && (
         <Button
           size="sm"
           variant="ghost"
-          className="-my-1 min-h-[22px] shrink-0 px-2"
+          className="min-h-[22px] shrink-0 px-2"
           disabled={stopping}
           onClick={() => {
             setStopping(true);
@@ -84,12 +140,9 @@ export function SessionBanners({
   }, [shown, onHeightChange]);
   if (!shown) return null;
   return (
-    <div ref={stripRef} className={SESSION_BANNERS}>
+    <div ref={stripRef} {...stylex.props(styles.strip)}>
       {session.goal && (
-        <span
-          className={`${SESSION_BANNER} text-dim`}
-          title="Cleared with /goal clear"
-        >
+        <span {...stylex.props(styles.chip)} title="Cleared with /goal clear">
           🎯 {session.goal}
         </span>
       )}

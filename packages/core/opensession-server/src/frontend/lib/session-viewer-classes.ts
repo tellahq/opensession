@@ -495,23 +495,6 @@ export const VIEWER_SUGGESTIONS_ROW =
 export const VIEWER_SUGGESTIONS_ROW_INLINE =
   "min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[10px]";
 
-/* ── Banners and the delete overlay ─────────────────────────────────────── */
-
-export const SESSION_BANNERS =
-  "flex flex-wrap gap-2 border-b border-divider bg-raised px-4 py-[7px] " +
-  // Phone: the session header floats over the top of the column, so an
-  // in-flow row would sit hidden under it. Pin it under the header (and the
-  // docked tab strip, when shown) like the strip itself.
-  "phone:absolute phone:inset-x-0 phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px))] phone:z-5 phone:px-3";
-
-/** A single notice pill. It carries no ink of its own: the caller supplies the
- *  tone, because two text-colour utilities on one element are resolved by
- *  Tailwind's output order rather than the order they are written. 12px in the
- *  old sheet; it is interface copy, so it snaps to `text-label`. */
-export const SESSION_BANNER =
-  "inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap " +
-  "rounded-full border border-line bg-panel px-3 py-[3px] text-label";
-
 /* ── Floating transcript pills ──────────────────────────────────────────────
  *
  * The pills themselves ("Load all", "Scroll to the bottom", the support rail,
