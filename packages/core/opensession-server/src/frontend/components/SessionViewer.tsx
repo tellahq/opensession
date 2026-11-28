@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { viewerLayout as styles } from "./session-viewer/layout-styles";
 import { BASE_PATH } from "../lib/base";
 import { useLocalFoldersFlap } from "./LocalFoldersFlap";
 import { useBuildsFlap } from "./BuildsFlap";
@@ -1499,7 +1501,7 @@ export function SessionViewer({
   };
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
+    <div {...stylex.props(styles.root)}>
       <SessionViewerDialogs
         confirmDialog={confirmDialog}
         deletion={{
@@ -1668,7 +1670,7 @@ export function SessionViewer({
         conversation={{ others, entries }}
       />
 
-      <div className="flex min-h-0 flex-1">
+      <div {...stylex.props(styles.body)}>
         <SessionViewerMainRegion
           session={session}
           surfaces={{

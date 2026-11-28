@@ -1,4 +1,6 @@
 import { type ComponentProps, type CSSProperties, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
+import { color, space } from "../../ui/tokens.stylex";
 import type { PanelBrowserTarget } from "../../lib/portal-pin";
 import { DiffPanel } from "../DiffPanel";
 import { PortalPane } from "../PortalPane";
@@ -40,6 +42,16 @@ interface SidePanelShell {
 
 type PreviewSurface = ComponentProps<typeof SessionPreviewSurface>["surface"];
 type StagingSurface = Extract<PreviewSurface, { kind: "staging" }>;
+
+const styles = stylex.create({
+  contents: { display: "contents" },
+  rule: {
+    marginTop: space.s8,
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: color.divider,
+  },
+});
 
 /** The Browser tab: what was handed to the panel, else the PR's preview. */
 export interface PanelBrowserContent {
@@ -237,7 +249,10 @@ export function SessionViewerSidePanel({
             {/* The summary card in the header says the same, so the column
                 only carries it while the card is down. */}
             {!summaryCardVisible && (
-              <section aria-label="Workspace summary" className="contents">
+              <section
+                aria-label="Workspace summary"
+                {...stylex.props(styles.contents)}
+              >
                 <WorkspaceSummaryBody
                   prGroupRef={measurePrBand}
                   session={summary.session}
@@ -260,10 +275,7 @@ export function SessionViewerSidePanel({
                   liveMedia={summaryRuntime.liveMedia}
                   close={summaryRuntime.close}
                 />
-                <div
-                  aria-hidden="true"
-                  className="mt-2 border-b border-divider"
-                />
+                <div aria-hidden="true" {...stylex.props(styles.rule)} />
               </section>
             )}
             <div ref={changesContainerRef}>
