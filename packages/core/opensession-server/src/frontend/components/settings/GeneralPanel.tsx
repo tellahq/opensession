@@ -418,7 +418,11 @@ function SignInSection() {
 export function GeneralPanel() {
   return (
     <SettingsPanel>
-      <SettingsHeader title="General" className="phone:hidden" />
+      <SettingsHeader
+        title="General"
+        description="Your organization's name, icon and sign-in."
+        className="phone:hidden"
+      />
       <OrganizationProfileSection />
       <SignInSection />
       <SettingsGroupLabel>Repositories</SettingsGroupLabel>

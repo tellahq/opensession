@@ -154,10 +154,10 @@ function CategoryCard({
 }) {
   const count = memoryCount(scopes);
   return (
-    <SettingCard>
+    <div>
       <button
         type="button"
-        className="focus-ring-inset group flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-left hover:bg-hover phone:items-start"
+        className="focus-ring-inset group flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-hover phone:items-start"
         onClick={onOpen}
       >
         <CategoryIcon category={category} />
@@ -182,7 +182,7 @@ function CategoryCard({
           />
         </span>
       </button>
-    </SettingCard>
+    </div>
   );
 }
 
@@ -1271,7 +1271,10 @@ export function MemoryPanel() {
   if (!scopes) {
     return (
       <SettingsPanel>
-        <SettingsHeader title="Memory" />
+        <SettingsHeader
+          title="Memory"
+          description="What sessions remember, kept in git."
+        />
         {error ? (
           <InlineAlert>{error}</InlineAlert>
         ) : (
@@ -1317,7 +1320,10 @@ export function MemoryPanel() {
 
   return (
     <SettingsPanel>
-      <SettingsHeader title="Memory" />
+      <SettingsHeader
+        title="Memory"
+        description="What sessions remember, kept in git."
+      />
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
@@ -1367,7 +1373,7 @@ export function MemoryPanel() {
         </SettingCard>
       )}
       {stats?.mode === "repo" && <MemoryReposCard onOpen={setSelectedRepo} />}
-      <div className="grid gap-3">
+      <SettingCard>
         {MEMORY_CATEGORIES.map((category) => (
           <CategoryCard
             key={category.kind}
@@ -1378,7 +1384,7 @@ export function MemoryPanel() {
             onOpen={() => setSelectedKind(category.kind)}
           />
         ))}
-      </div>
+      </SettingCard>
     </SettingsPanel>
   );
 }

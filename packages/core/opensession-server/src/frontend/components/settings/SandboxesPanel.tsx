@@ -783,7 +783,7 @@ function ConnectionCard({
 
   return (
     <>
-      <SettingCard>
+      <div>
         <div className="grid grid-cols-[minmax(0,1fr)_5.75rem] gap-x-4 gap-y-3 px-5 py-4 desktop:grid-cols-[minmax(0,1fr)_13rem]">
           <div className="col-start-1 row-start-1 flex min-w-0 items-start gap-3">
             <SandboxProviderLogo provider={connection.provider} />
@@ -900,7 +900,7 @@ function ConnectionCard({
             </div>
           )}
         </div>
-      </SettingCard>
+      </div>
       <ConnectDialog
         connection={connection}
         open={dialogOpen}
@@ -1235,23 +1235,25 @@ export function SandboxesPanel() {
       {connectionsError && <InlineAlert>{connectionsError}</InlineAlert>}
       {environmentsError && <InlineAlert>{environmentsError}</InlineAlert>}
       <SettingsGroupLabel>Providers</SettingsGroupLabel>
-      <div className="grid gap-3">
-        {loading && (
-          <SettingCardSkeleton
-            rows={3}
-            icon={40}
-            label="Loading sandbox connections"
-          />
-        )}
-        {connections.map((connection) => (
-          <ConnectionCard
-            key={connection.provider}
-            connection={connection}
-            operations={operations}
-            onChanged={apply}
-          />
-        ))}
-      </div>
+      {loading && (
+        <SettingCardSkeleton
+          rows={3}
+          icon={40}
+          label="Loading sandbox connections"
+        />
+      )}
+      {connections.length > 0 && (
+        <SettingCard>
+          {connections.map((connection) => (
+            <ConnectionCard
+              key={connection.provider}
+              connection={connection}
+              operations={operations}
+              onChanged={apply}
+            />
+          ))}
+        </SettingCard>
+      )}
       <SandboxSleepSettings />
       {reusableEnvironments.length > 0 && (
         <>

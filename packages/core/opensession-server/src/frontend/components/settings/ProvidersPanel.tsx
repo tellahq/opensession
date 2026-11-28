@@ -10,7 +10,10 @@ import { OpenAIKeySection } from "./OpenAIKeySection";
 export function ProvidersPanel() {
   return (
     <SettingsPanel>
-      <SettingsHeader title="Models" />
+      <SettingsHeader
+        title="Models"
+        description="Which models sessions use, and the accounts behind them."
+      />
       <ModelDefaultsSection />
       <ProviderAccountsSection />
       <ModelProvidersPanel />

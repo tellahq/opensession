@@ -90,7 +90,7 @@ const styles = stylex.create({
     borderWidth: geometry.hairline,
     borderStyle: "solid",
     borderColor: color.dialogRing,
-    backgroundColor: color.sidebar,
+    backgroundColor: color.settingsNav,
     boxShadow: shadow.lg,
   },
   page: {
@@ -99,7 +99,7 @@ const styles = stylex.create({
     height: "100%",
     minHeight: 0,
     flex: "1 1 0%",
-    backgroundColor: color.sidebar,
+    backgroundColor: color.settingsNav,
   },
   nav: {
     display: "flex",
@@ -184,12 +184,13 @@ const styles = stylex.create({
     borderLeftWidth: geometry.hairline,
     borderLeftStyle: "solid",
     borderLeftColor: color.divider,
-    backgroundColor: color.page,
+    backgroundColor: color.settingsCanvas,
     paddingInline: space.s32,
     paddingTop: geometry.settingsContentTop,
     boxShadow: { default: null, [media.desktop]: geometry.contentEdgeShadow },
   },
   contentTool: {
+    backgroundColor: color.page,
     minHeight: 0,
     paddingInline: space.s0,
     paddingTop: space.s0,
@@ -357,11 +358,10 @@ export const SETTINGS_MODAL = cn("settings-modal", sx(styles.modal));
 export const SETTINGS_SCRIM = sx(styles.scrim);
 export const SETTINGS_PANEL = sx(styles.panel);
 
-/** Settings laid straight on the window's page, as Conductor does: the plate
- *  under each group and its outline go, leaving rows and the hairlines
- *  between them. The phone sheet keeps its grouped plates. */
-export const SETTINGS_FLAT =
-  "[--settings-plate:transparent] [--settings-plate-edge:transparent]";
+/** Each group as a card on the desktop window's sunken page, as Granola does
+ *  it. The phone sheet keeps its own plates. */
+export const SETTINGS_CARDS =
+  "[--settings-plate:var(--settings-card)] [--settings-plate-edge:var(--settings-card-edge)]";
 
 /**
  * The nav column. No fill, no edge: the page under it is already the sidebar

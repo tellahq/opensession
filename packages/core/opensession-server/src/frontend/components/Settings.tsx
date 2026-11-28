@@ -5,7 +5,7 @@ import { cn } from "../ui/cn";
 import {
   SETTINGS_BACK,
   SETTINGS_CONTENT_SHEET,
-  SETTINGS_FLAT,
+  SETTINGS_CARDS,
   SETTINGS_MODAL,
   SETTINGS_NAV,
   SETTINGS_NAV_CAPTION,
@@ -549,13 +549,12 @@ export function Settings({
 
           {/* Tool sections fill the whole content area edge-to-edge (they
               carry their own layout and scrolling); settings panels keep the
-              centered reading column, laid flat on the page: rows and
-              hairlines, no plates. */}
+              centered reading column, a card per group. */}
           <div
             data-settings-scroll
             className={cn(
               settingsContent(TOOL_SECTIONS.has(active)),
-              SETTINGS_FLAT,
+              SETTINGS_CARDS,
             )}
           >
             {TOOL_SECTIONS.has(active) ? (
