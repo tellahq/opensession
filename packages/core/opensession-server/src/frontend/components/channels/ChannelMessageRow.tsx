@@ -19,6 +19,7 @@ import {
   IconCopy,
   IconDotsVertical,
   IconFile,
+  IconArrowRight,
   IconLink,
   IconMessage,
   IconPencil,
@@ -31,6 +32,8 @@ import { ChannelComposer } from "./ChannelComposer";
 import { EmojiPicker } from "./EmojiPicker";
 import { RichAttachments, RichBlocks } from "./RichContent";
 import { SlackText } from "./SlackText";
+
+const JUMP_GLYPH = <IconArrowRight size={22} />;
 
 function Reactions({
   reactions,
@@ -202,6 +205,9 @@ export function ChannelMessageRow({
   onSaveEdit,
   onCancelEdit,
   onDelete,
+  onJump,
+  inThread = false,
+  highlight = false,
   className,
 }: {
   message: ChannelMessage;
@@ -220,6 +226,12 @@ export function ChannelMessageRow({
   onCancelEdit?: () => void;
   /** Present for the person's own message: delete it, after a confirm. */
   onDelete?: () => void;
+  /** A search result: open its conversation at it. */
+  onJump?: () => void;
+  /** A search result that is a thread reply. */
+  inThread?: boolean;
+  /** Just opened at: marked for a moment, as Slack does. */
+  highlight?: boolean;
   /** Placement, and a corner for a row inside a rounded card. */
   className?: string;
 }) {
@@ -233,10 +245,12 @@ export function ChannelMessageRow({
     // selects the message and shows its actions.
     <div
       tabIndex={-1}
+      data-ts={message.ts}
       className={cn(
-        "group relative flex gap-2 px-5 outline-none transition-colors hover:bg-hover focus-within:bg-hover",
+        "group relative flex gap-2 px-5 outline-none transition-colors duration-long hover:bg-hover focus-within:bg-hover",
         head ? "mt-1 pt-2 pb-1" : "py-0.5",
-        (threadOpen || editing) && "bg-yellow-soft hover:bg-yellow-soft",
+        (threadOpen || editing || highlight) &&
+          "bg-yellow-soft hover:bg-yellow-soft",
         className,
       )}
     >
@@ -265,10 +279,23 @@ export function ChannelMessageRow({
                 App
               </span>
             )}
-            <span className="text-meta text-faint tabular-nums">
-              {messageTime(message.ts)}
-            </span>
+            {onJump ? (
+              // Slack opens a result from its time, as a link to it.
+              <ListRow
+                onClick={onJump}
+                className="min-h-0 w-auto p-0 text-meta text-faint tabular-nums hover:text-link hover:underline"
+              >
+                {messageTime(message.ts)}
+              </ListRow>
+            ) : (
+              <span className="text-meta text-faint tabular-nums">
+                {messageTime(message.ts)}
+              </span>
+            )}
           </div>
+        )}
+        {inThread && (
+          <div className="text-meta text-faint">Replied in a thread</div>
         )}
         {message.broadcast && (
           <div className="text-meta text-faint">Replied to a thread</div>
@@ -337,6 +364,21 @@ export function ChannelMessageRow({
             "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100",
           )}
         >
+          {onJump && (
+            <Tooltip
+              label={inThread ? "Open in thread" : "Open in conversation"}
+            >
+              <Button
+                variant="ghost"
+                size="md"
+                icon={JUMP_GLYPH}
+                aria-label={
+                  inThread ? "Open in thread" : "Open in conversation"
+                }
+                onClick={onJump}
+              />
+            </Tooltip>
+          )}
           {onReact && (
             <EmojiPicker
               side="bottom"

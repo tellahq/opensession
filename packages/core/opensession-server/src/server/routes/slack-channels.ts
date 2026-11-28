@@ -451,6 +451,80 @@ export async function handleSlackChannelRoutes(
     }
   }
 
+  // Search across Slack as the caller (agents/slack/search.ts).
+  if (path === "/api/slack/search" && req.method === "GET") {
+    const query = (url.searchParams.get("q") || "").trim().slice(0, 500);
+    if (!query) return Response.json({ error: "q required" }, { status: 400 });
+    const page = Math.max(
+      1,
+      parseInt(url.searchParams.get("page") || "1", 10) || 1,
+    );
+    const sort =
+      url.searchParams.get("sort") === "timestamp" ? "timestamp" : "score";
+    if (process.env.OPENSESSION_DEMO === "1")
+      return Response.json(demoSearch(query, sort));
+    const caller = callerOf(ctx);
+    if (!caller)
+      return Response.json({ error: "Sign in first" }, { status: 401 });
+    const { mcpUserGrantToken } = await import("../mcp-oauth");
+    const grantToken = mcpUserGrantToken("slack", caller);
+    if (!grantToken)
+      return Response.json(
+        { error: "Connect your Slack account in Settings, Account" },
+        { status: 403 },
+      );
+    try {
+      const { searchSlack } = await import("../../agents/slack/search");
+      const { messageConverter } =
+        await import("../../agents/slack/message-view");
+      const { resolveSlackUser } = await import("../../agents/slack/slack-api");
+      const { groupMessageName } =
+        await import("../../agents/slack/conversations");
+      const found = await searchSlack(caller, grantToken, query, {
+        page,
+        sort,
+      });
+      const convert = await messageConverter(caller, grantToken);
+      const results = [];
+      for (const { found: hit, raw } of found.matches) {
+        const message = await convert(raw, { inThread: true });
+        if (!message) continue;
+        const channel = (raw as { channel?: { is_mpim?: boolean } }).channel;
+        const channelName = channel?.is_mpim
+          ? groupMessageName(hit.channelName)
+          : hit.isDirect && /^U[A-Z0-9]+$/.test(hit.channelName)
+            ? (await resolveSlackUser(hit.channelName).catch(() => null))
+                ?.name || hit.channelName
+            : hit.channelName;
+        results.push({
+          channelId: hit.channelId,
+          channelName,
+          isDirect: hit.isDirect,
+          ...(hit.threadTs ? { threadTs: hit.threadTs } : {}),
+          message,
+        });
+      }
+      return Response.json({
+        results,
+        total: found.total,
+        page: found.page,
+        pages: found.pages,
+      });
+    } catch (e: any) {
+      return Response.json(
+        {
+          error:
+            e?.message === "missing_scope"
+              ? "Reconnect Slack in Settings, Account to search from here"
+              : e?.message === "ratelimited"
+                ? "Slack asked to slow down. Try again in a minute."
+                : "Couldn't search Slack",
+        },
+        { status: e?.message === "missing_scope" ? 403 : 502 },
+      );
+    }
+  }
+
   // A message's link in Slack, for Copy link and Open in Slack.
   const linkMatch = path.match(/^\/api\/slack\/channels\/([^/]+)\/permalink$/);
   if (linkMatch && req.method === "GET") {
@@ -1132,6 +1206,42 @@ async function demoReaction(
   }
   message.reactions = reactions.filter((r) => r.count > 0);
   return Response.json({ ok: true });
+}
+
+/** Search over the demo's in-memory conversations. */
+function demoSearch(query: string, sort: "score" | "timestamp") {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const conversations = demoConversations().conversations;
+  const results = [];
+  for (const conversation of conversations) {
+    const history = demoHistory(conversation.id);
+    const threads = [...demoHistories.entries()].filter(([key]) =>
+      key.startsWith(`${conversation.id}:`),
+    );
+    const candidates = [
+      ...history.map((message) => ({ message, threadTs: undefined })),
+      ...threads.flatMap(([key, replies]) =>
+        replies.map((message) => ({
+          message,
+          threadTs: key.slice(conversation.id.length + 1),
+        })),
+      ),
+    ];
+    for (const { message, threadTs } of candidates) {
+      const text = String(message.text || "").toLowerCase();
+      if (!words.every((word) => text.includes(word))) continue;
+      results.push({
+        channelId: conversation.id,
+        channelName: conversation.name,
+        isDirect: conversation.kind === "dm",
+        ...(threadTs ? { threadTs } : {}),
+        message: { ...message, replyCount: 0 },
+      });
+    }
+  }
+  if (sort === "timestamp")
+    results.sort((a, b) => Number(b.message.ts) - Number(a.message.ts));
+  return { results, total: results.length, page: 1, pages: 1 };
 }
 
 function demoThreads() {

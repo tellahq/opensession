@@ -31,6 +31,7 @@ import {
   IconLock,
   IconMessages,
   IconPencil,
+  IconSearch,
   IconSend,
   type IconSize,
   IconTrash,
@@ -80,11 +81,12 @@ export function ConversationGlyph({
 }
 
 const PAGES = [
+  { id: "search", label: "Search", icon: <IconSearch /> },
   { id: "threads", label: "Threads", icon: <IconMessages /> },
   { id: "drafts", label: "Drafts & sent", icon: <IconSend /> },
 ] as const;
 
-/** Threads and Drafts & sent, above the sections, as the tools sit above
+/** Search, Threads and Drafts & sent, above the sections, as the tools sit above
  *  the session list. Drafts counts what is waiting to be sent. */
 function PageRows({
   activeId,

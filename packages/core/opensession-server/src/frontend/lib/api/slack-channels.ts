@@ -275,3 +275,30 @@ export function fetchSent(): Promise<{ messages: SentMessage[] }> {
 export function fileSrc(thumb: string): string {
   return `${BASE_PATH}${thumb}`;
 }
+
+/** A message Search found, with the conversation it is in. */
+export interface SearchResult {
+  channelId: string;
+  channelName: string;
+  isDirect: boolean;
+  /** The thread it replied in. */
+  threadTs?: string;
+  message: ChannelMessage;
+}
+
+export interface SearchResultsPage {
+  results: SearchResult[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export function searchMessages(
+  query: string,
+  opts: { page?: number; sort?: "score" | "timestamp" } = {},
+): Promise<SearchResultsPage> {
+  const params = new URLSearchParams({ q: query });
+  if (opts.page && opts.page > 1) params.set("page", String(opts.page));
+  if (opts.sort === "timestamp") params.set("sort", "timestamp");
+  return request(`/slack/search?${params}`, { label: "Couldn't search Slack" });
+}
