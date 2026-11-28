@@ -39,17 +39,23 @@ export type Route =
       view: "channels";
       id?: string;
       thread?: string;
-      /** Threads, Drafts & sent or Search, instead of a conversation. */
+      /** Activity, Threads, Drafts & sent or Search, instead of a
+       *  conversation. */
       page?: ChannelsPageName;
       /** What Search looks for. */
       query?: string;
     };
 
 /** The Channels place's own pages, which sit above its conversations. */
-export type ChannelsPageName = "threads" | "drafts" | "search";
+export type ChannelsPageName = "threads" | "drafts" | "search" | "activity";
 
 export function isChannelsPage(value: string): value is ChannelsPageName {
-  return value === "threads" || value === "drafts" || value === "search";
+  return (
+    value === "threads" ||
+    value === "drafts" ||
+    value === "search" ||
+    value === "activity"
+  );
 }
 
 const TOOL_VIEWS = new Set(["automations", "security", "goals"]);

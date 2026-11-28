@@ -302,3 +302,8 @@ export function searchMessages(
   if (opts.sort === "timestamp") params.set("sort", "timestamp");
   return request(`/slack/search?${params}`, { label: "Couldn't search Slack" });
 }
+
+/** Messages that mention you, newest first (Activity). */
+export function fetchActivity(): Promise<{ items: SearchResult[] }> {
+  return request("/slack/activity", { label: "Couldn't load your mentions" });
+}

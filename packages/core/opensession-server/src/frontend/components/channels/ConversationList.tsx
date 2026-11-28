@@ -1,3 +1,6 @@
+import { useChannelActivity } from "../../hooks/useChannelActivity";
+import { useActivitySeen } from "../../lib/channel-activity";
+import { unseenCount } from "../../lib/channel-activity-model";
 import { useState } from "react";
 import type { Conversation } from "../../lib/api/slack-channels";
 import {
@@ -31,6 +34,7 @@ import {
   IconLock,
   IconMessages,
   IconPencil,
+  IconBell,
   IconSearch,
   IconSend,
   type IconSize,
@@ -82,12 +86,14 @@ export function ConversationGlyph({
 
 const PAGES = [
   { id: "search", label: "Search", icon: <IconSearch /> },
+  { id: "activity", label: "Activity", icon: <IconBell /> },
   { id: "threads", label: "Threads", icon: <IconMessages /> },
   { id: "drafts", label: "Drafts & sent", icon: <IconSend /> },
 ] as const;
 
-/** Search, Threads and Drafts & sent, above the sections, as the tools sit above
- *  the session list. Drafts counts what is waiting to be sent. */
+/** Search, Activity, Threads and Drafts & sent, above the sections, as the
+ *  tools sit above the session list. Activity counts mentions you have not
+ *  seen, Drafts what is waiting to be sent. */
 function PageRows({
   activeId,
   onOpen,
@@ -96,6 +102,8 @@ function PageRows({
   onOpen: (id: string) => void;
 }) {
   const drafts = useChannelDrafts().length;
+  const activity = useChannelActivity();
+  const unseen = unseenCount(activity.items ?? [], useActivitySeen());
   return (
     <div className="flex flex-col gap-0.5 pb-3">
       {PAGES.map((page) => {
@@ -113,7 +121,13 @@ function PageRows({
             <SidebarToolRowBody
               icon={page.icon}
               label={page.label}
-              count={page.id === "drafts" ? drafts : undefined}
+              count={
+                page.id === "drafts"
+                  ? drafts
+                  : page.id === "activity" && activeId !== "activity"
+                    ? unseen
+                    : undefined
+              }
               active={active}
             />
           </ListRow>

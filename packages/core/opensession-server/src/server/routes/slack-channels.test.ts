@@ -138,3 +138,8 @@ describe("sharing files in the Channels place", () => {
     expect(uploadFileName(null)).toBeUndefined();
   });
 });
+
+test("Activity asks Slack for mentions of you by others", async () => {
+  const { mentionsQuery } = await import("./slack-channels");
+  expect(mentionsQuery("U123")).toBe("<@U123> -from:<@U123>");
+});
