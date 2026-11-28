@@ -110,3 +110,31 @@ describe("editing and deleting in the Channels place", () => {
     );
   });
 });
+
+describe("sharing files in the Channels place", () => {
+  test("a post needs text or files", async () => {
+    const { PostMessageBody } = await import("./slack-channels");
+    expect(PostMessageBody.safeParse({ text: "hi" }).success).toBe(true);
+    expect(
+      PostMessageBody.safeParse({ files: [{ id: "F123", title: "a.png" }] })
+        .success,
+    ).toBe(true);
+    expect(PostMessageBody.safeParse({ text: " " }).success).toBe(false);
+    expect(
+      PostMessageBody.safeParse({ files: [{ id: "../x", title: "a" }] })
+        .success,
+    ).toBe(false);
+  });
+
+  test("an upload's name is the file's own, without a path", async () => {
+    const { uploadFileName } = await import("./slack-channels");
+    expect(uploadFileName(encodeURIComponent("Screen shot.png"))).toBe(
+      "Screen shot.png",
+    );
+    expect(uploadFileName(encodeURIComponent("../../etc/passwd"))).toBe(
+      "passwd",
+    );
+    expect(uploadFileName("%E0%A4%A")).toBeUndefined();
+    expect(uploadFileName(null)).toBeUndefined();
+  });
+});

@@ -6,6 +6,7 @@ import {
   markRead,
   postMessage,
   setReaction,
+  uploadFile,
   type ChannelMessage,
 } from "../lib/api/slack-channels";
 import { toggledReactions } from "../lib/channel-messages";
@@ -24,7 +25,7 @@ export interface ChannelMessagesState {
   /** Read with the person's own grant, so they can post and react. */
   asUser: boolean;
   loadOlder: () => Promise<void>;
-  send: (text: string, broadcast?: boolean) => Promise<boolean>;
+  send: (text: string, broadcast?: boolean, files?: File[]) => Promise<boolean>;
   react: (message: ChannelMessage, name: string, emoji?: string) => void;
   /** The ts of the message open for editing. */
   editing: string | null;
@@ -128,12 +129,20 @@ export function useChannelMessages(
       .finally(() => setLoadingOlder(false));
   }
 
-  async function send(text: string, broadcast = false): Promise<boolean> {
+  async function send(
+    text: string,
+    broadcast = false,
+    files: File[] = [],
+  ): Promise<boolean> {
     try {
+      const uploaded = [];
+      for (const file of files)
+        uploaded.push(await uploadFile(channelId, file));
       await postMessage(
         channelId,
         text,
         thread ? { ts: thread, broadcast } : undefined,
+        uploaded,
       );
       void refresh.current?.();
       return true;
