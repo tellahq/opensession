@@ -107,6 +107,20 @@ export function markConversationSeen(id: string): void {
   });
 }
 
+/** Marked unread from a message: show its dot again. */
+export function markConversationUnread(id: string): void {
+  const payload = snapshot.payload;
+  if (!payload) return;
+  set({
+    payload: {
+      ...payload,
+      conversations: payload.conversations.map((c) =>
+        c.id === id ? { ...c, unread: true } : c,
+      ),
+    },
+  });
+}
+
 /** Anything unread you have not hidden: the minibar's dot. */
 export function hasUnreadConversation(
   conversations: readonly Conversation[] | undefined,

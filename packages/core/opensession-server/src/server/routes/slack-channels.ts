@@ -661,6 +661,15 @@ export async function handleSlackChannelRoutes(
   // the caller's OWN read cursor via their grant, so the sidebar unread dot
   // clears. No grant → no-op (the bot has no per-user cursor to move).
   const readMatch = path.match(/^\/api\/slack\/channels\/([^/]+)\/read$/);
+  if (
+    readMatch &&
+    req.method === "POST" &&
+    process.env.OPENSESSION_DEMO === "1"
+  ) {
+    const body = (await req.json().catch(() => null)) as { ts?: string } | null;
+    if (body?.ts) demoReads.set(decodeURIComponent(readMatch[1]!), body.ts);
+    return Response.json({ ok: !!body?.ts });
+  }
   if (readMatch && req.method === "POST") {
     const caller = ctx.authUser?.login || ctx.authUser?.name || undefined;
     const { mcpUserGrantToken } = await import("../mcp-oauth");
@@ -821,10 +830,23 @@ export async function handleSlackChannelRoutes(
         const view = await convert(m, { inThread: !!threadTs });
         if (view) out.push(view);
       }
+      // Opening the conversation (`read=1` on its first page) also says
+      // where the person had read to, for the "New" line.
+      const lastRead =
+        url.searchParams.get("read") === "1" && grantToken && !threadTs
+          ? await slackApiGet(
+              "conversations.info",
+              { channel: channelId },
+              grantToken,
+            )
+              .then((info) => info?.channel?.last_read)
+              .catch(() => undefined)
+          : undefined;
       return Response.json({
         messages: out,
         hasMore: !!data.has_more,
         asUser: !!grantToken,
+        ...(typeof lastRead === "string" ? { lastRead } : {}),
       });
     } catch (e: any) {
       return Response.json(
@@ -1163,6 +1185,9 @@ function demoArt(name: string): Response | undefined {
     : undefined;
 }
 
+/** Where the demo's reader has read each conversation to. */
+const demoReads = new Map<string, string>();
+
 async function demoChannelMessages(
   req: Request,
   url: URL,
@@ -1193,7 +1218,18 @@ async function demoChannelMessages(
       demoHistories.set(`${channelId}:${threadTs}`, replies);
       return Response.json({ messages: replies, hasMore: false, asUser: true });
     }
-    return Response.json({ messages: history, hasMore: false, asUser: true });
+    // #engineering opens with its last two messages new, until read.
+    const lastRead =
+      url.searchParams.get("read") === "1"
+        ? (demoReads.get(channelId) ??
+          (channelId === "CDEMO0002" ? history.at(-3)?.ts : history.at(-1)?.ts))
+        : undefined;
+    return Response.json({
+      messages: history,
+      hasMore: false,
+      asUser: true,
+      ...(lastRead ? { lastRead } : {}),
+    });
   }
   if (req.method === "POST") {
     const parsed = PostMessageBody.safeParse(

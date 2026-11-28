@@ -21,6 +21,7 @@ import {
   IconFile,
   IconArrowRight,
   IconLink,
+  IconMail,
   IconMessage,
   IconPencil,
   IconReactionAdd,
@@ -205,6 +206,7 @@ export function ChannelMessageRow({
   onSaveEdit,
   onCancelEdit,
   onDelete,
+  onMarkUnread,
   onJump,
   inThread = false,
   highlight = false,
@@ -226,6 +228,8 @@ export function ChannelMessageRow({
   onCancelEdit?: () => void;
   /** Present for the person's own message: delete it, after a confirm. */
   onDelete?: () => void;
+  /** In a conversation: leave this message and later ones unread. */
+  onMarkUnread?: () => void;
   /** A search result: open its conversation at it. */
   onJump?: () => void;
   /** A search result that is a thread reply. */
@@ -434,11 +438,11 @@ export function ChannelMessageRow({
                 }
               >
                 <IconCopy size={20} className={MENU_ICON} />
-                <span className="grow">Copy text</span>
+                <Menu.Label>Copy text</Menu.Label>
               </Menu.Item>
               <Menu.Item onClick={copyLink}>
                 <IconLink size={20} className={MENU_ICON} />
-                <span className="grow">Copy link</span>
+                <Menu.Label>Copy link</Menu.Label>
               </Menu.Item>
               <Menu.Item
                 onClick={() =>
@@ -448,19 +452,25 @@ export function ChannelMessageRow({
                 }
               >
                 <IconShare size={20} className={MENU_ICON} />
-                <span className="grow">Open in Slack</span>
+                <Menu.Label>Open in Slack</Menu.Label>
               </Menu.Item>
+              {onMarkUnread && (
+                <Menu.Item onClick={onMarkUnread}>
+                  <IconMail size={20} className={MENU_ICON} />
+                  <Menu.Label>Mark unread</Menu.Label>
+                </Menu.Item>
+              )}
               {(onEdit || onDelete) && <Menu.Separator />}
               {onEdit && (
                 <Menu.Item onClick={onEdit}>
                   <IconPencil size={20} className={MENU_ICON} />
-                  <span className="grow">Edit message</span>
+                  <Menu.Label>Edit message</Menu.Label>
                 </Menu.Item>
               )}
               {onDelete && (
                 <Menu.Item onClick={onDelete} tone="danger">
                   <IconTrash size={20} />
-                  <span className="grow">Delete message</span>
+                  <Menu.Label>Delete message</Menu.Label>
                 </Menu.Item>
               )}
             </Menu.Popup>

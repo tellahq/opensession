@@ -331,7 +331,11 @@ export function markConversationRead(
   const state = directories.get(caller)?.states.get(channelId);
   if (!state) return;
   state.lastRead = ts;
-  if (state.unreadCount !== undefined) state.unreadCount = 0;
+  // Marked unread from a message: the count is no longer known, so the dot
+  // follows the read cursor instead.
+  if (state.latestTs && tsNumber(ts) < tsNumber(state.latestTs))
+    delete state.unreadCount;
+  else if (state.unreadCount !== undefined) state.unreadCount = 0;
 }
 
 /** The person's own Slack user id, for telling their reactions apart. */
