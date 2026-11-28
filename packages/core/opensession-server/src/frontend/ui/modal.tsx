@@ -187,7 +187,8 @@ const styles = stylex.create({
   // painted edge rather than behind it.
   description: { marginTop: `calc(-1 * ${space.s2})` },
   // A 32px circle with an invisible 4px apron, so the corner target is
-  // bigger than the glyph's wash.
+  // bigger than the glyph's wash. On a phone the apron grows to the 44px
+  // touch target without moving the glyph.
   close: {
     position: "relative",
     marginRight: `calc(-1 * ${space.s6})`,
@@ -215,7 +216,10 @@ const styles = stylex.create({
     "::after": {
       content: "''",
       position: "absolute",
-      inset: `calc(-1 * ${space.s4})`,
+      inset: {
+        default: `calc(-1 * ${space.s4})`,
+        [media.phone]: geometry.touchBleed,
+      },
     },
   },
   footer: {
