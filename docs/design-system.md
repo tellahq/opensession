@@ -75,6 +75,9 @@ its odd values. A rule in a document does not stop that. A type does.
    `geometry.page*` and `geometry.card`. An inline status dot is
    `size-dot-inline`. `arbitrary-size` counts every other raw length on a
    size, width or height utility.
+   Keyboard focus is one ring, 2px of accent ink: `focus-ring` draws it
+   2px outside the box, and `focus-ring-inset` draws the same ring inside,
+   for a row whose rounded list clips anything outside it.
 2. **Primitives** (`ui/*.tsx`). Authored in StyleX against the tokens. Each
    one owns its look completely and exposes `variant` / `size` for the
    choices the system has made, plus an `xstyle` prop whose type only accepts

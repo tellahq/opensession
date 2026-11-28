@@ -1081,7 +1081,7 @@ a.issue-ref {
    row of large cards; the full path remains in the link's title. */
 a.asset-ref {
   border: 0;
-  border-radius: calc(9px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   background: var(--accent-soft);
   color: var(--text);
@@ -1151,7 +1151,7 @@ a.asset-ref:focus-visible {
   /* Same corner as the asset chip above: at this height 9px (12.15 once
 	   --rf scales it) takes the full box, so the chip reads as a capsule
 	   around its label rather than a rounded rectangle sitting in prose. */
-  border-radius: calc(9px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   transition:
     background var(--dur-micro) var(--ease),
@@ -1258,7 +1258,7 @@ a.person-chip {
   /* The same corner as the three chips around it. It was a true capsule,
 	   which at this height reads as a different object in the same sentence:
 	   a squircle capsule is what every other pill in the app is. */
-  border-radius: calc(9px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   transition: background var(--dur-micro) var(--ease);
 }
@@ -1321,7 +1321,7 @@ a.issue-ref {
   color: var(--text);
   border: 0;
   /* Capsule corner, same as the session chip above. */
-  border-radius: calc(9px * var(--rf));
+  border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
   font-weight: 600;
   font-variant-numeric: tabular-nums;

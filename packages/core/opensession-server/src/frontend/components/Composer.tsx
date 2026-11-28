@@ -2114,7 +2114,7 @@ export function Composer({
                   // Acknowledged: the press registered, the engine is winding
                   // down. Not `disabled` — pressing again re-sends the cancel.
                   stopping && "opacity-60",
-                  escArmed && "ring-2 ring-red/45",
+                  escArmed && "ring-2 ring-red/40",
                 )}
                 onPress={onStop}
                 disabled={disabled}
@@ -2338,7 +2338,7 @@ export function Composer({
         >
           <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-red" />
           <span>Press</span>
-          <kbd className="rounded-xs border border-red/30 bg-red/10 px-1 py-px font-mono text-[10.5px] leading-none text-red">
+          <kbd className="rounded-xs border border-red/34 bg-red/10 px-1 py-px font-mono text-[10.5px] leading-none text-red">
             Esc
           </kbd>
           <span>again to stop</span>

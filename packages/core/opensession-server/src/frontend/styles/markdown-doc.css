@@ -162,7 +162,7 @@
   max-width: 100%;
   margin: 4px 0 20px;
   border: 1px solid var(--border-strong);
-  border-radius: calc(10px * var(--rf));
+  border-radius: calc(12px * var(--rf));
   corner-shape: var(--cs);
   border-collapse: separate;
   border-spacing: 0;
@@ -186,5 +186,5 @@
 
 .markdown.markdown-doc img {
   max-height: none;
-  border-radius: calc(10px * var(--rf));
+  border-radius: calc(12px * var(--rf));
 }

@@ -369,7 +369,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     keyboard-reachable without nesting one inside the other.
                     Content above it is inert unless it has its own tooltip. */}
                     <button
-                      className="absolute inset-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
+                      className="focus-ring-inset absolute inset-0 rounded-sm outline-none"
                       onClick={() => onSelect(a.id)}
                     >
                       <span className="sr-only">Open {a.name}</span>

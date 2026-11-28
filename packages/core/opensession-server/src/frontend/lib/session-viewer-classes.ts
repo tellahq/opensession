@@ -736,7 +736,7 @@ export const INFO_HERO =
 /** 20px in the old sheet — the page's one heading, so it snaps to
  *  `text-page-title` (22px). */
 export const INFO_NAME =
-  "mt-[9px] max-w-full text-page-title font-semibold leading-[1.2] tracking-title break-words text-fg";
+  "mt-[9px] max-w-full text-page-title font-semibold leading-tight tracking-title break-words text-fg";
 export const INFO_SUB =
   "flex min-h-11 w-full max-w-full items-center justify-center gap-x-1 px-6 text-label font-medium text-dim";
 
