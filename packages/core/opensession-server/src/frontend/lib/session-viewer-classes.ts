@@ -157,22 +157,6 @@ export const VIEWER_HEADER_ACTIONS =
   "phone:[&_button]:min-h-11 phone:[&_button]:px-[11px] phone:[&_button]:py-[7px] " +
   "phone:[&_button]:text-label";
 
-/** The presence facepile (Figma/Notion-style), just before Share. Labelled
- *  items in the row space themselves off the icon cluster; the icons keep the
- *  row's tight 2px gap. */
-export const VIEWER_PRESENCE = "mx-1.5 flex items-center";
-
-/**
- * One face in it. They overlap by 8px, while the call site matches Feed's
- * front-to-back order and full squircle ring. The first face keeps the row's
- * own left edge.
- */
-export const VIEWER_PRESENCE_AVATAR = "-ml-2 first:ml-0";
-
-/** ⋯ overflow: the secondary actions collapse into the shared Menu popup when
- *  they would otherwise crowd the title. */
-export const VIEWER_OVERFLOW = "relative inline-flex";
-
 /* ── Panes ──────────────────────────────────────────────────────────────── */
 
 /**
@@ -186,35 +170,6 @@ export const VIEWER_REVIEW_MAIN =
   "phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px))]";
 
 /* ── Transcript ─────────────────────────────────────────────────────────── */
-
-/**
- * Holds the scroll area plus the floating "Jump to latest" pill.
- *
- * Phones fade the transcript under their floating pills with the header's own
- * wash (see VIEWER_MESSAGES), where the chrome overlays the content instead of
- * sitting above it. Desktop draws VIEWER_TOP_FADE here instead.
- */
-export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
-
-/**
- * The desktop transcript's soft top edge: a 24px eased page-colour wash
- * (styles/scrim.css) under the bar or tab strip, so rows dissolve into the chrome instead of being cut.
- *
- * Only while the transcript is scrolled (`data-scrolled`, from
- * hooks/useScrollEdge.ts). At rest the first rows sit in clear space below the
- * bar, and a wash there would only dim them; an earlier always-on scroll-edge
- * wash was removed for exactly that.
- *
- * A sibling overlay rather than a mask on the scroller: a masked scroller on
- * iOS Safari can leave whole bands unpainted (see VIEWER_MESSAGES). It stops
- * short of the overlay scrollbar's 14px gutter for the same reason the
- * composer's fade does.
- */
-export const VIEWER_TOP_FADE =
-  "pointer-events-none absolute left-0 right-[14px] top-0 z-1 h-6 " +
-  "scrim-to-t " +
-  "opacity-0 transition-opacity duration-micro motion-reduce:transition-none " +
-  "data-[scrolled]:opacity-100 phone:hidden";
 
 /**
  * The scroll container.

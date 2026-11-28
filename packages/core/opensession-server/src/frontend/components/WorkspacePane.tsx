@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import type { TabStripPlacement } from "../lib/split-tabs";
 import { AGENT_NAME } from "../lib/brand";
@@ -81,7 +82,6 @@ import {
   VIEWER_BRANCH_RENAME,
   VIEWER_HEADER,
   VIEWER_HEADER_ACTIONS,
-  VIEWER_OVERFLOW,
   VIEWER_TITLE,
 } from "../lib/session-viewer-classes";
 import {
@@ -185,6 +185,11 @@ interface Props {
  */
 const VIEW_MAIN =
   "phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px))]";
+
+const styles = stylex.create({
+  /** The ⋯ menu's anchor. */
+  overflow: { position: "relative", display: "inline-flex" },
+});
 
 /**
  * The session-less workspace container: what a /workspace/<id> route renders when
@@ -690,7 +695,7 @@ export function WorkspacePane({
   // the foreground tab changes from a session to a workspace-wide pane.
   const workspaceMenu = (
     <Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
-      <div className={VIEWER_OVERFLOW}>
+      <div {...stylex.props(styles.overflow)}>
         <Menu.Trigger
           render={
             <Button

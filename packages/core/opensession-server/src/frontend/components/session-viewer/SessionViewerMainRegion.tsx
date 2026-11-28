@@ -20,7 +20,7 @@ import { AnimatePresence } from "motion/react";
 import { EmptyState, InlineAlert } from "../../ui/state";
 import * as stylex from "@stylexjs/stylex";
 import { sx } from "../../ui/sx";
-import { geometry, space } from "../../ui/tokens.stylex";
+import { geometry, media, motion, space } from "../../ui/tokens.stylex";
 import { AGENT_NAME } from "../../lib/brand";
 import { withQuotes, type Quote } from "../../lib/quotes";
 import { messageLink } from "../../lib/message-link";
@@ -95,12 +95,10 @@ import {
   SCROLL_ACTION_BESIDE_REPLIES,
   VIEWER_INPUT,
   VIEWER_MESSAGES,
-  VIEWER_MESSAGES_REGION,
   VIEWER_REVIEW_MAIN,
   VIEWER_SUGGESTIONS,
   VIEWER_SUGGESTIONS_ROW,
   VIEWER_SUMMARY_STEP,
-  VIEWER_TOP_FADE,
 } from "../../lib/session-viewer-classes";
 import type { UnifiedSession } from "../../lib/types";
 import type { SessionComments } from "../../lib/comment-threads";
@@ -203,6 +201,22 @@ interface PaneRegion {
 }
 
 const styles = stylex.create({
+  /** A soft edge under the bar once the transcript scrolls
+   *  (`data-scrolled`, useScrollEdge). It stops short of the scrollbar. */
+  topFade: {
+    pointerEvents: "none",
+    position: "absolute",
+    left: 0,
+    right: space.s14,
+    top: 0,
+    zIndex: 1,
+    height: space.s24,
+    opacity: { default: 0, ":is([data-scrolled])": 1 },
+    transitionProperty: { default: "opacity", [media.reducedMotion]: "none" },
+    transitionDuration: motion.micro,
+    transitionTimingFunction: motion.ease,
+    display: { default: null, [media.phone]: "none" },
+  },
   findScope: {
     position: "relative",
     display: "flex",
@@ -908,7 +922,7 @@ export function SessionViewerMainRegion({
             {/* The step lives here rather than on the scroller alone, so the
 					    pills floating beside it inherit it too and stay on the reading
 					    column instead of the middle of the pane. */}
-            <div className={VIEWER_MESSAGES_REGION} style={summaryStepStyle}>
+            <div {...stylex.props(styles.findScope)} style={summaryStepStyle}>
               {/* Selecting transcript text offers actions without changing either
 						    composer until the person chooses where to use it. */}
               {linkMenu.element}
@@ -932,7 +946,11 @@ export function SessionViewerMainRegion({
                   return true;
                 }}
               />
-              <div ref={setTopFade} className={VIEWER_TOP_FADE} aria-hidden />
+              <div
+                ref={setTopFade}
+                {...sx(styles.topFade, "scrim-to-t")}
+                aria-hidden
+              />
               <StickyActivePrompt
                 containerRef={messagesRef}
                 entries={entries}

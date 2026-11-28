@@ -125,9 +125,6 @@ import {
   HEADER_SESSIONBAR_USAGE,
 } from "../../lib/app-header-classes";
 import {
-  VIEWER_OVERFLOW,
-  VIEWER_PRESENCE,
-  VIEWER_PRESENCE_AVATAR,
   infoTopbarClass,
   infoTopbarTitleClass,
 } from "../../lib/session-viewer-classes";
@@ -405,6 +402,14 @@ const styles = stylex.create({
   infoSection: { marginTop: space.s16, paddingInline: space.s12 },
   /** Header controls sit 6px apart. */
   keepGap: { marginInlineEnd: space.s6 },
+  /** The ⋯ menu's anchor. */
+  overflow: { position: "relative", display: "inline-flex" },
+  /** Who else is viewing: a facepile between the header actions. */
+  presence: {
+    marginInline: space.s6,
+    display: "flex",
+    alignItems: "center",
+  },
   contents: { display: "contents" },
   diffUnderInfoBar: { "--diff-panel-top": geometry.infoBarClearance },
   dim: { color: color.dim },
@@ -1064,7 +1069,7 @@ export function SessionViewerChrome({
           // menu is one place rather than two.
           const overflowMenu = (
             <Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
-              <div className={VIEWER_OVERFLOW}>
+              <div {...stylex.props(styles.overflow)}>
                 <Menu.Trigger
                   // Rendered AS the Button primitive rather than restyled to
                   // look like one, so the box, radius, hover wash, transition
@@ -1216,7 +1221,7 @@ export function SessionViewerChrome({
                   )}
                   {!isPhone && others.length > 0 && (
                     <div
-                      className={VIEWER_PRESENCE}
+                      {...stylex.props(styles.presence)}
                       title={`Viewing: ${others.join(", ")}`}
                     >
                       {dedupeViewers(others).map((v, index, viewers) => (
@@ -1224,7 +1229,8 @@ export function SessionViewerChrome({
                           key={v.name}
                           name={v.name}
                           size={24}
-                          className={VIEWER_PRESENCE_AVATAR}
+                          // Faces overlap by 8px; the first keeps the row's edge.
+                          className="-ml-2 first:ml-0"
                           style={facepileAvatarStyle(
                             index,
                             viewers.length,
