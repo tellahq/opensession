@@ -13,6 +13,7 @@ import type {
   RichField,
   RichImage,
 } from "../../shared/slack-rich";
+import { embedFor, isXVideoStill } from "../../shared/slack-embed";
 
 type Render = (markup: string) => Promise<string>;
 
@@ -145,6 +146,8 @@ async function block(b: any, render: Render): Promise<RichBlock | null> {
       if (thumb) out.thumb = thumb;
       const provider = str(b.provider_name);
       if (provider) out.provider = provider;
+      const embed = embedFor(b.video_url) ?? embedFor(b.title_url);
+      if (embed?.kind === "video") out.embed = embed;
       return out;
     }
     default:
@@ -247,6 +250,11 @@ async function attachment(
     );
     if (thumb) out.thumb = thumb;
   }
+  // A video plays in place; a post on X does when its picture is a video's
+  // still, since the post's own player is what has the video.
+  const embed = embedFor(a.original_url ?? a.from_url ?? a.title_link);
+  if (embed && (embed.kind === "video" || isXVideoStill(a.image_url)))
+    out.embed = embed;
   const footer = await markup(a.footer);
   if (footer) out.footer = footer;
   const footerIcon = safeUrl(a.footer_icon);

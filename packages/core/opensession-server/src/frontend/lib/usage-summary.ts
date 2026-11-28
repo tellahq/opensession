@@ -1,4 +1,4 @@
-// What the usage bar and its compact ring both read: how full the context is,
+// What the usage bar and its context warning both read: how full the context is,
 // what the conversation has spent, and the limits of the account the next
 // turn will most likely run on. One function so the two cannot disagree.
 
