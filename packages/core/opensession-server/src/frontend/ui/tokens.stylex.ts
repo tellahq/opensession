@@ -31,6 +31,8 @@ export const color = stylex.defineConsts({
   popupRing: "var(--popup-ring)",
   // Interaction washes: translucent ink, so one value reads on any surface.
   hover: "var(--hover)",
+  /** The solid grey a hover wash lands on (a chip resting on a field). */
+  hoverSolid: "var(--bg-hover)",
   /** The person's own message bubble (and the pill that quotes it). */
   bubbleUser: "var(--bubble-user)",
   pressed: "var(--hover-strong)",
@@ -576,6 +578,9 @@ export const geometry = stylex.defineConsts({
   turnGap: "18px",
   /** A toast: as wide as its message, up to 480px, never past the window. */
   toastMaxWidth: "min(480px, calc(100vw - 32px))",
+  /** A file chip: at most 240px wide, led by a 34px type badge. */
+  fileChipMaxWidth: "240px",
+  fileChipBadge: "34px",
   toastMaxWidthPhone: "calc(100vw - 24px)",
   toastFrontHeight: "var(--toast-frontmost-height)",
   /** How far each toast behind the front one peeks out, and shrinks. */

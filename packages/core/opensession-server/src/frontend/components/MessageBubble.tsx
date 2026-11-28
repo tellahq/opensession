@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { sx } from "../ui/sx";
 import { useAgentMessageSummary } from "../hooks/useAgentMessageSummary";
 import React, { useId, useState } from "react";
 import { z } from "zod";
@@ -53,14 +55,7 @@ import { AgentIdentity } from "./AgentIdentity";
 import { AgentDeliveryMark } from "./AgentDeliveryMark";
 import { outgoingAgentMessage } from "../lib/agent-message";
 
-import {
-  fileChipCard,
-  fileChipCardPadding,
-  fileChipMeta,
-  fileChipName,
-  fileChipSub,
-  fileChipThumb,
-} from "../lib/composer-classes";
+import { fileChip } from "../ui/file-chip";
 import {
   msgBody,
   msgBubbleHuman,
@@ -907,19 +902,15 @@ function EntryFiles({
       {files.map((f, i) => (
         <a
           key={i}
-          className={cn(
-            fileChipCard,
-            fileChipCardPadding,
-            "no-underline hover:border-accent",
-          )}
+          {...stylex.props(fileChip.card, fileChip.link)}
           href={`/media?path=${encodeURIComponent(f.path)}`}
           download={f.name}
           title={f.name}
         >
-          <span className={fileChipThumb}>{extBadge(f.name)}</span>
-          <span className={fileChipMeta}>
-            <span className={fileChipName}>{f.name}</span>
-            <span className={fileChipSub}>Attachment</span>
+          <span {...stylex.props(fileChip.badge)}>{extBadge(f.name)}</span>
+          <span {...stylex.props(fileChip.meta)}>
+            <span {...stylex.props(fileChip.name)}>{f.name}</span>
+            <span {...stylex.props(fileChip.sub)}>Attachment</span>
           </span>
         </a>
       ))}
@@ -1009,18 +1000,17 @@ function PastedTextCard({
       className="flex min-w-0 max-w-full flex-col items-end"
     >
       <Collapsible.Trigger
-        className={cn(
-          fileChipCard,
-          fileChipCardPadding,
-          "focus-ring cursor-pointer text-left hover:border-accent",
+        {...sx(
+          [fileChip.card, fileChip.link],
+          "focus-ring cursor-pointer text-left",
         )}
       >
-        <span className={fileChipThumb}>
+        <span {...stylex.props(fileChip.badge)}>
           <IconFileText2 size={20} />
         </span>
-        <span className={fileChipMeta}>
-          <span className={fileChipName}>Pasted text</span>
-          <span className={fileChipSub}>
+        <span {...stylex.props(fileChip.meta)}>
+          <span {...stylex.props(fileChip.name)}>Pasted text</span>
+          <span {...stylex.props(fileChip.sub)}>
             {pastedTextLineLabel(shown)}
             {partial ? " · partial" : ""}
             {" · "}

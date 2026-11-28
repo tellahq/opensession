@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import React, {
   useEffect,
   useEffectEvent,
@@ -20,7 +21,7 @@ import {
   shouldAttachPastedTextAsFile,
   shouldCollapsePastedText,
 } from "../lib/pasted-text";
-import { fileChipRow } from "../lib/composer-classes";
+import { fileChip } from "../ui/file-chip";
 import { insertPastedSessionId } from "../lib/session-url";
 import { insideOpenFence, isSendCombo } from "../lib/send-key";
 import {
@@ -527,7 +528,7 @@ export function NewSessionPrompt({
         disabled={disabled}
       />
       {pastedTexts.length > 0 && (
-        <div className={fileChipRow}>
+        <div {...stylex.props(fileChip.row)}>
           <AnimatePresence initial={false}>
             {pastedTexts.map((attachment) => (
               <PastedTextContext

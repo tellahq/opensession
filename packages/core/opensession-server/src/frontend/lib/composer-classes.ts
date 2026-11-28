@@ -179,29 +179,6 @@ export const composerSendStop =
  *  background-clip paints a 32px disc without moving the hit area. */
 export const composerSendMinimizedFill = "phone:bg-clip-content phone:p-1";
 
-/* ── File attachment chips ────────────────────────────────────────
-   Shared by the composer's staged attachments (removable) and a user turn's
-   download chips in the transcript (a link). The right padding is deliberately
-   not part of the card: the composer needs room for its × button. */
-export const fileChipRow = "mb-2 flex flex-wrap gap-2";
-export const fileChipCard =
-  "relative inline-flex max-w-[240px] items-center gap-[9px] rounded-lg border border-line-strong bg-[var(--bg-hover)] py-1.5 pl-1.5";
-/** Composer: leaves room for the absolutely-placed remove button. */
-export const fileChipCardPaddingRemovable = "pr-[26px]";
-/** Transcript: nothing to remove there, and `.msg-file-card` asked for 10px —
- *  but that rule sat ABOVE `.composer-file-card`'s padding shorthand in the
- *  stylesheet at equal specificity, so it never applied. This keeps what the
- *  chip has always rendered; closing it up is a design change, not a migration. */
-export const fileChipCardPadding = "pr-[26px]";
-export const fileChipThumb =
-  "inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-accent/16 text-[10px] font-bold tracking-wide text-accent";
-export const fileChipMeta = "flex min-w-0 flex-col gap-px";
-/** The chip's title. 13px (text-label) rather than the stylesheet's off-scale
- *  12px — it is interface copy, and the card's height comes from the 34px
- *  badge, so nothing reflows. */
-export const fileChipName = "truncate text-label text-fg";
-export const fileChipSub = "text-meta text-faint";
-
 /* ── Flap edges ───────────────────────────────────────────────────
    Shared by both flaps that tuck under the composer (the queue flap below and
    the run-status flap in components/ComposerAgents.tsx). */
@@ -249,11 +226,6 @@ export const composerQueueItemSeparated = "border-t border-line pt-2";
  *  still take clicks — a drag only starts once the pointer actually moves. */
 export const composerQueueItemDraggable =
   "cursor-grab touch-none active:cursor-grabbing";
-/** A status readout, not a control: "Steered". Genuinely
- *  round (the stylesheet spelled a bare 999px with no `corner-shape`), so
- *  `rounded-full` rather than `rounded-capsule`. */
-export const composerQueuePill =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent-ink";
 /** Optimistic busy send: a transient readout, not a badge or control. Keeping
  *  it borderless prevents the in-flight state from reading as a pill button. */
 export const composerQueueSendingStatus =
