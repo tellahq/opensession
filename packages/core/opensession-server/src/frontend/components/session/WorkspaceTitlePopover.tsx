@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useSessionGitResource } from "../../hooks/useApiResources";
+import { useIsPhone } from "../../hooks/useIsPhone";
+import { useNavigation } from "../../hooks/useNavigation";
 import { relativeTime } from "../../lib/api";
 import { cachedRepos } from "../../lib/repo-cache";
 import {
@@ -7,10 +9,14 @@ import {
   VIEWER_BRANCH,
   VIEWER_BRANCH_EDITABLE,
 } from "../../lib/session-viewer-classes";
+import { useSessionRecords } from "../../lib/session-records";
+import { startedSessions } from "../../lib/session-threads";
+import { openThreadTab } from "../../lib/thread-tabs";
 import { fullTime } from "../../lib/time";
 import type { SessionUsage, UnifiedSession } from "../../lib/types";
 import { fmtTokens, fmtUsd, totalTokens } from "../../lib/usage-format";
 import { cn } from "../../ui/cn";
+import { ListRow } from "../../ui/list-row";
 import { OverflowFadeText } from "../../ui/overflow-fade-text";
 import { Popover } from "../../ui/popover";
 import {
@@ -22,7 +28,7 @@ import {
   IconRepo,
   IconTokens,
 } from "../icons";
-import { RepoTile } from "../RepoTile";
+import { ThreadCardSummary } from "../threads/ThreadCards";
 
 /**
  * The header title as a button: a click opens a card with the whole name and
@@ -164,6 +170,7 @@ export function WorkspaceTitlePopover({
           repoControl={repoControl}
           active={open}
           className="mt-3"
+          onOpenSession={() => setOpen(false)}
         />
       </Popover.Popup>
     </Popover.Root>
@@ -180,6 +187,7 @@ export function WorkspaceFacts({
   repoControl,
   active,
   className,
+  onOpenSession,
 }: {
   session: UnifiedSession;
   /** Whose cost, tokens and age to total. */
@@ -189,7 +197,12 @@ export function WorkspaceFacts({
   /** Whether the surface is open: the target branch is fetched only then. */
   active: boolean;
   className?: string;
+  /** Close the surface when one of the started sessions opens. */
+  onOpenSession?: () => void;
 }) {
+  const navigation = useNavigation();
+  const phone = useIsPhone();
+  const started = startedSessions(useSessionRecords(), session.id);
   const repoId = !session.repoLess && !session.desk ? session.repo : undefined;
   const repo = repoId
     ? cachedRepos().find((info) => info.id === repoId)
@@ -226,10 +239,7 @@ export function WorkspaceFacts({
           <Fact icon={<IconRepo size={20} />} label="Repository">
             <span className="flex min-w-0 items-center gap-1">
               {repoControl ?? (
-                <span className="flex min-w-0 items-center gap-2">
-                  <RepoTile name={repoId} size={20} />
-                  <span className="truncate">{repo?.label || repoId}</span>
-                </span>
+                <span className="truncate">{repo?.label || repoId}</span>
               )}
               {repo?.ghRepo && (
                 <a
@@ -281,9 +291,40 @@ export function WorkspaceFacts({
           </dl>
         </>
       )}
+      {started.length > 0 && (
+        <>
+          <div className="my-3 h-px bg-line" />
+          <div className="mb-1 text-meta text-faint">Started here</div>
+          <div className="-mx-2 flex flex-col">
+            {started.slice(0, STARTED_SHOWN).map((thread) => (
+              <ListRow
+                key={thread.id}
+                className="items-center gap-3 rounded-lg px-2 py-1.5 font-sans hover:bg-hover"
+                aria-label={`Open ${thread.title}`}
+                onClick={() => {
+                  onOpenSession?.();
+                  // A tab of its own beside this one on desktop.
+                  if (!phone) openThreadTab(thread.id);
+                  navigation.openSession(thread.id);
+                }}
+              >
+                <ThreadCardSummary thread={thread} />
+              </ListRow>
+            ))}
+          </div>
+          {started.length > STARTED_SHOWN && (
+            <div className="mt-1 text-meta text-faint">
+              {started.length - STARTED_SHOWN} more in Threads
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
+
+/** Started sessions the card lists before it counts the rest. */
+const STARTED_SHOWN = 5;
 
 /** The card's title, read or edited: the same box either way, so the text
  *  does not move when the field opens. Pulled out by its own padding so the

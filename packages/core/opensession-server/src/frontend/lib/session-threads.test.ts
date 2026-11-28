@@ -6,6 +6,7 @@ import {
   sessionThreads,
   spawnedThreadId,
   startedGoalId,
+  startedSessions,
   startedGoalName,
   threadState,
   threadStatusLine,
@@ -153,6 +154,33 @@ describe("spawnedThreadId", () => {
         "Depth limit reached",
       ),
     ).toBeNull();
+  });
+});
+
+describe("startedSessions", () => {
+  test("lists workers, created sessions and goals a chat started, newest first", () => {
+    const rows = [
+      session("root"),
+      session("worker", {
+        parentSessionId: "root",
+        createdAt: "2026-11-01T01:00:00Z",
+      }),
+      session("created", {
+        spawnedBy: "root",
+        createdAt: "2026-11-01T03:00:00Z",
+      }),
+      session("goal-run", {
+        goalId: "goal-1",
+        goalStartedFrom: "root",
+        createdAt: "2026-11-01T02:00:00Z",
+      }),
+      session("other", { spawnedBy: "elsewhere" }),
+    ];
+    expect(startedSessions(rows, "root").map((s) => s.id)).toEqual([
+      "created",
+      "goal-run",
+      "worker",
+    ]);
   });
 });
 

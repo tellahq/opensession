@@ -615,6 +615,8 @@ export interface UnifiedSession {
   goal?: string;
   /** The Goal record driving this session, when a goal woke it. */
   goalId?: string;
+  /** For a goal's session: the chat that started the goal. */
+  goalStartedFrom?: string;
   loop?: {
     prompt: string;
     intervalMinutes: number;

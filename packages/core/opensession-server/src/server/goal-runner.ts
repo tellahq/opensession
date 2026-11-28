@@ -163,6 +163,7 @@ export async function runGoal(goal: Goal): Promise<void> {
           title: goal.name,
           mode: goal.mode,
           goalId: goal.id,
+          goalStartedFrom: goal.startedFrom,
           lastActivity: new Date().toISOString(),
         };
       });

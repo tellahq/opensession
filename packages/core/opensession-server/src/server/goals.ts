@@ -74,6 +74,8 @@ export interface Goal {
   mcpServers?: string[];
   createdBy: string;
   createdAt: string;
+  /** The chat whose agent created this goal, so that chat can list it. */
+  startedFrom?: string;
 }
 
 // GOALS_DIR is created by the first goal write; a missing directory reads as
@@ -152,6 +154,7 @@ export async function createGoal(input: {
   /** ISO8601 first wake; omitted/empty = wake on the next tick. */
   firstWakeAt?: string;
   createdBy: string;
+  startedFrom?: string;
 }): Promise<Goal | { error: string }> {
   if (!input.name?.trim()) return { error: "Name is required" };
   if (!input.mission?.trim()) return { error: "Mission is required" };
@@ -193,6 +196,7 @@ export async function createGoal(input: {
     createdBy: input.createdBy || "Anonymous",
     createdAt: new Date().toISOString(),
   };
+  if (input.startedFrom) g.startedFrom = input.startedFrom;
   await saveGoal(g);
 
   // Seed the ledger so the first wake has something to read.

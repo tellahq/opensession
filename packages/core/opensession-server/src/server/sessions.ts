@@ -1164,6 +1164,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     usage: data.usage,
     goal: data.goal,
     goalId: data.goalId,
+    goalStartedFrom: data.goalStartedFrom,
     lastRunError: data.lastRunError,
     loop: data.loop,
     slackThreads: data.slackThreads,

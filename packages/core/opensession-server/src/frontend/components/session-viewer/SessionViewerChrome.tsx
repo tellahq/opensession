@@ -1007,7 +1007,7 @@ export function SessionViewerChrome({
                   // the title card's facts) docks beside the actions.
                   aside={
                     menuInTab ? (
-                      <div className="my-1.5 mr-1.5 w-[272px] shrink-0 self-start rounded-lg bg-hover px-3.5 pb-2 pt-3">
+                      <div className="w-[272px] shrink-0 border-l border-divider px-3.5 pb-2 pt-3">
                         <div className="text-label font-medium text-fg [overflow-wrap:anywhere]">
                           {parentSession
                             ? session.title
@@ -1022,6 +1022,7 @@ export function SessionViewerChrome({
                           }
                           active={overflowOpen}
                           className="mt-2"
+                          onOpenSession={() => setOverflowOpen(false)}
                         />
                       </div>
                     ) : undefined

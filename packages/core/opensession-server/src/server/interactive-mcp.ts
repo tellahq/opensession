@@ -224,7 +224,11 @@ export function interactiveMcpServers(
     "opensession-runners": () => createRunnersMcpServer({ user, sessionId }),
     // Long-running goals: create/list/steer persistent, self-pacing missions.
     "opensession-goals": () =>
-      createGoalsMcpServer({ createdBy, isAdmin: true }),
+      createGoalsMcpServer({
+        createdBy,
+        isAdmin: true,
+        currentSessionId: sessionId,
+      }),
     // Search past sessions' distilled records (session-index.ts). Read-only,
     // but transcripts can hold sensitive material — interactive-only like the
     // siblings (the automation gate in the run-rpc builder below fails closed).

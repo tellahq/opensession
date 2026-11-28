@@ -56,6 +56,25 @@ export function isCoordinating(
   );
 }
 
+/**
+ * What a chat started directly: its worker threads, sessions its agent
+ * created, and the sessions of goals it set going. Newest first.
+ */
+export function startedSessions(
+  sessions: readonly UnifiedSession[],
+  rootId: string,
+): UnifiedSession[] {
+  return sessions
+    .filter(
+      (session) =>
+        session.id !== rootId &&
+        (session.parentSessionId === rootId ||
+          session.spawnedBy === rootId ||
+          session.goalStartedFrom === rootId),
+    )
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
 /** The sessions `rootId` started, and theirs in turn, newest first. */
 export function sessionThreads(
   sessions: readonly UnifiedSession[],
