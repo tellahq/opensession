@@ -252,7 +252,8 @@ test("wide Review keeps page navigation in the identity bar", () => {
   expect(prPanelSource).toContain('aria-label="Back to overview"');
   expect(prPanelSource).toContain("phoneNavigation");
   expect(prPanelSource).not.toContain("phonePageTabs");
-  expect(prPanelSource).toContain("{pageTabs}\n              {fileControls}");
+  expect(prPanelSource).toContain("{pageTabs}");
+  expect(prPanelSource).toMatch(/\{pageTabs\}[\s\S]{0,600}fileControls/);
   expect(prFilesPageSource).not.toContain("desktop:pt-12");
   expect(prOverviewPageSource).not.toContain("desktop:pt-12");
   expect(summarySource).not.toContain('aria-label="Pull request pages"');

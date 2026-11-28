@@ -22,6 +22,9 @@ import { PrOverviewPage } from "./pr/PrOverviewPage";
 import { PhoneReviewHeader } from "./pr/PhoneReviewHeader";
 import { DiffStat } from "./DiffStat";
 import { PrFilesPage } from "./pr/PrFilesPage";
+import { PrCommitsPage } from "./pr/PrCommitsPage";
+import { PrChecksPage } from "./pr/PrChecksPage";
+import { useNewLayoutPref } from "../lib/new-layout-pref";
 import { FinishReviewDialog } from "./pr/FinishReviewDialog";
 import {
   allowedReviewEvent,
@@ -82,7 +85,9 @@ import {
   IconBranches,
   IconCheck,
   IconChecklist,
+  IconCheckCircle,
   IconFile,
+  IconGitCommit,
   IconChevronLeft,
   IconCopy,
   IconDotsHorizontal,
@@ -147,7 +152,7 @@ import {
 
 type CodeView = "all" | "guide" | "flow";
 type DiffSource = "pull-request" | "worktree";
-export type PrReviewPage = "overview" | "files";
+export type PrReviewPage = "overview" | "commits" | "checks" | "files";
 
 const NO_PR_FILES: NonNullable<PrDetails["files"]> = [];
 const NOOP_SEND = () => {};
@@ -368,6 +373,10 @@ export function PrPanel({
    * never re-triggers guide or code-flow generation.
    */
   const [localPage, setLocalPage] = useState<PrReviewPage>("files");
+  // The new layout gives Review GitHub's four pages: Commits and Checks are
+  // places again rather than rollups in the Overview rail.
+  const newLayout = useNewLayoutPref();
+  const phoneLayout = useIsPhone();
   const page = controlledPage ?? localPage;
   const setPage = (next: PrReviewPage) => {
     setLocalPage(next);
@@ -397,6 +406,10 @@ export function PrPanel({
     }
     if (focusTarget.view === "checks" && focusApplied.current.checks !== seq) {
       focusApplied.current.checks = seq;
+      if (newLayout && !phoneLayout) {
+        setPage("checks");
+        return;
+      }
       setPage("overview");
       setFocusChecksSeq((prev) => prev + 1);
     }
@@ -406,7 +419,6 @@ export function PrPanel({
   }, [focusTarget?.seq, targets]);
   /** A file picked on Overview, waiting for the code page to have its diff. */
   const [pendingReveal, setPendingReveal] = useState<string | null>(null);
-  const phoneLayout = useIsPhone();
   // Rendering preferences are shared with sidebar Changes, so choosing wrap,
   // split view, highlighting or a theme in either viewer updates the other.
   const codeDisplaySettings = useCodeDisplaySettings(
@@ -1782,6 +1794,22 @@ export function PrPanel({
       comments.length || undefined,
       <IconChecklist key="overview" size={20} />,
     ],
+    ...(newLayout
+      ? ([
+          [
+            "commits",
+            "Commits",
+            pr.commits?.length || undefined,
+            <IconGitCommit key="commits" size={20} />,
+          ],
+          [
+            "checks",
+            "Checks",
+            pr.checks?.length || undefined,
+            <IconCheckCircle key="checks" size={20} />,
+          ],
+        ] as const)
+      : []),
     [
       "files",
       "Files changed",
@@ -1797,7 +1825,13 @@ export function PrPanel({
       label="Pull request pages"
       value={page}
       onValueChange={(next) => {
-        if (next === "overview" || next === "files") setPage(next);
+        if (
+          next === "overview" ||
+          next === "commits" ||
+          next === "checks" ||
+          next === "files"
+        )
+          setPage(next);
       }}
       className="shrink-0 phone:hidden"
     >
@@ -2102,7 +2136,19 @@ export function PrPanel({
             own controls at the row's far end. */}
             <div className="flex h-10 shrink-0 items-stretch gap-2 border-t border-divider px-4">
               {pageTabs}
-              {fileControls}
+              {/* Off the code page the row's end carries the PR's size, as
+              GitHub's tab row does. */}
+              {newLayout && page !== "files" ? (
+                <span className="ml-auto flex items-center">
+                  <DiffStat
+                    files={files}
+                    additions={pr.additions}
+                    deletions={pr.deletions}
+                  />
+                </span>
+              ) : (
+                fileControls
+              )}
             </div>
           </>
         )}
@@ -2112,7 +2158,22 @@ export function PrPanel({
         <StackLinkSection pr={pr} sessionId={sessionId} onLinked={load} />
       )}
 
-      {page === "overview" ? (
+      {page === "commits" ? (
+        <PrCommitsPage
+          pr={pr}
+          provider={provider}
+          commitNotes={caps.commitNotes}
+        />
+      ) : page === "checks" ? (
+        <PrChecksPage
+          summary={checkSummary}
+          onFixChecks={
+            send && checkSummary.failed > 0
+              ? () => handleFixChecks(summaryDraft)
+              : undefined
+          }
+        />
+      ) : page === "overview" ? (
         <PrOverviewPage
           compactToolbar={compactToolbar}
           sessionId={sessionId}
