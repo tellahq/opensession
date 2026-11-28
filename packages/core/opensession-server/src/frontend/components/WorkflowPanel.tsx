@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { section } from "../ui/section";
 import { useAgentName } from "../hooks/useAgentName";
 import React, { useEffect, useState } from "react";
 import { z } from "zod";
@@ -15,10 +17,7 @@ import { EmptyState, InlineAlert } from "../ui/state";
 import { IconStack } from "./icons";
 import { PanelPageHeader } from "./PanelPageHeader";
 import { formatDuration } from "../lib/time";
-import {
-  INFO_LABEL_CLASS,
-  INFO_SECTION_CLASS,
-} from "../lib/session-viewer-classes";
+
 import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
 import { Badge } from "../ui/badge";
@@ -96,7 +95,7 @@ const RUN_TONE: Record<
 };
 
 /** The card's plate and the rows inside it: the Info panel's list grammar
- *  (INFO_LIST_CLASS), so an agent row lines up with a portal or a changed
+ *  (the panel plate, ui/section), so an agent row lines up with a portal or a changed
  *  file rather than inventing a third row shape. */
 const CARD_CLASS = "overflow-hidden rounded-lg bg-panel p-1";
 const ROW_CLASS =
@@ -444,11 +443,12 @@ export function WorkflowPanel({
   // like Git status or the changed-files list. No padding of its own, because
   // the page owns the inset.
   return (
-    <div className={INFO_SECTION_CLASS}>
+    <div {...stylex.props(section.panelStack)}>
       <div
-        className={cn(
-          INFO_LABEL_CLASS,
-          "flex items-center justify-between gap-2",
+        {...stylex.props(
+          section.label,
+          section.panelLabel,
+          section.panelLabelRow,
         )}
       >
         <span>Agents</span>
@@ -573,7 +573,7 @@ function WorkflowsEmptyState() {
         it fans out many small agents at once, then combines what they find.
       </EmptyState>
       <div className="grid gap-[5px]">
-        <div className={INFO_LABEL_CLASS}>Try</div>
+        <div {...stylex.props(section.label, section.panelLabel)}>Try</div>
         <CardList as="ul" className="rounded-lg">
           {[
             "Use a workflow to audit every route for missing auth checks.",

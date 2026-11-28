@@ -5,6 +5,7 @@ import { SELECTABLE } from "./dialog-styles";
 import { fieldClasses } from "./input";
 import { markTileClass } from "../lib/mark-tile";
 import { Skeleton, SkeletonBar } from "./state";
+import { section } from "./section";
 import { sx } from "./sx";
 import {
   color,
@@ -90,7 +91,7 @@ export function SettingsGroupLabel({
     <div
       data-settings-group-label=""
       {...props}
-      {...sx(styles.groupLabel, className, style)}
+      {...sx([section.label, styles.groupLabel], className, style)}
     >
       <span {...stylex.props(styles.shrinkable)}>{children}</span>
       {actions && <div {...stylex.props(styles.groupActions)}>{actions}</div>}
@@ -515,9 +516,6 @@ const styles = stylex.create({
     columnGap: space.s8,
     rowGap: space.s6,
     paddingInline: space.s20,
-    fontSize: text.label,
-    fontWeight: weight.medium,
-    color: color.dim,
   },
   groupActions: {
     display: "flex",

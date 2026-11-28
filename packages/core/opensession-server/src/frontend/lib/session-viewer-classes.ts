@@ -604,35 +604,3 @@ export const infoTopbarTitleClass = (scrolled: boolean) =>
   (scrolled
     ? "opacity-100 [transform:translateY(0)]"
     : "opacity-0 [transform:translateY(5px)]");
-
-/**
- * The Info panel's section grammar, shared by everything that renders into it
- * (WorkspaceInfo's own blocks, plus the Portals and Agents sections beneath
- * them). One faint label over one borderless plate: the plate's `bg-panel`
- * against the panel's own surface is what separates a section, so a section
- * never takes a border — a hairline there would turn a column of them into a
- * form. Rows go straight into the plate and are divided by `gap-px`.
- */
-export const INFO_SECTION_CLASS = "grid gap-[5px]";
-/**
- * One inset for the whole panel: content sits 12px from the plate's edge, and
- * the label sits over it rather than over the plate. A list gets there as 4 of
- * plate padding plus 8 on the row (INFO_LIST_CLASS + a `px-2` row), a label by
- * paying the 12 itself, and anything that is its own content — a screenshot
- * frame — by taking all 12 as padding. The panel used to run five different
- * insets (8, 11, 12, 13, 16) with the label aligned to none of them, which is
- * the kind of thing nobody can name and everybody can feel.
- */
-export const INFO_LABEL_CLASS =
-  "px-3 text-label font-semibold tracking-tight text-faint";
-export const INFO_LIST_CLASS =
-  "grid gap-px overflow-hidden rounded-lg bg-panel p-1";
-
-/** The whole-workspace view embedded below the actions.
- *
- *  The panel's own `px-2` is the desktop side panel's inset, which pays part of
- *  it through the `px-1` its mounts wrap it in. The phone page has no such
- *  wrapper, so it names its own 12px here and every plate on the page lands on
- *  the same edge as the strip and the repo list above them. */
-export const INFO_OVERVIEW =
-  "pt-4 [&_.workspace-info-panel]:pt-0 [&_.workspace-info-panel]:px-3";

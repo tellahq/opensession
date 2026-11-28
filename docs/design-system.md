@@ -178,6 +178,10 @@ property, like the side panel plate) keep working unchanged.
    - A control floating over content (Load all, Scroll to the bottom, the
      support rail, the pinned prompt) is `floatingPill` (`ui/floating-pill`):
      always an opaque lid with the popup ring, never glass.
+   - A section names itself with `section.label` (`ui/section`): label
+     size, medium, dim. Settings groups, side panel sections and the
+     workspace summary's bands all use it; a count beside it is faint. A
+     side panel section is `section.panelStack` > label + `section.panelPlate`.
 
 ### Open decisions
 

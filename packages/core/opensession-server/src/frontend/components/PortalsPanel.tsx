@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { section } from "../ui/section";
 import { sandboxSleepKeeps, sleepsInLabel } from "../lib/sandbox-sleep";
 import { useState } from "react";
 import type {
@@ -6,10 +8,7 @@ import type {
   PreviewStatus,
 } from "../lib/api";
 import { portalTargetFor, type PortalTarget } from "../lib/portals";
-import {
-  INFO_LABEL_CLASS,
-  INFO_SECTION_CLASS,
-} from "../lib/session-viewer-classes";
+
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { IconArrowUpRight, IconPin } from "./icons";
@@ -157,8 +156,10 @@ export function PortalsPage({
               </div>
             ) : null}
             {recipes.length ? (
-              <div className={INFO_SECTION_CLASS}>
-                <div className={INFO_LABEL_CLASS}>Start a portal</div>
+              <div {...stylex.props(section.panelStack)}>
+                <div {...stylex.props(section.label, section.panelLabel)}>
+                  Start a portal
+                </div>
                 <div className={PORTAL_LIST_CLASS}>
                   {recipes.map((recipe) => {
                     const service = recipe.serviceKey
@@ -219,9 +220,11 @@ export function PortalsPage({
                 </div>
               </div>
             ) : null}
-            <div className={INFO_SECTION_CLASS}>
+            <div {...stylex.props(section.panelStack)}>
               {recipes.length > 0 && (
-                <div className={INFO_LABEL_CLASS}>Services</div>
+                <div {...stylex.props(section.label, section.panelLabel)}>
+                  Services
+                </div>
               )}
               <div className={PORTAL_LIST_CLASS}>
                 {services.length ? (

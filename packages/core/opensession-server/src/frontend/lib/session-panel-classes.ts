@@ -116,7 +116,7 @@ export const PANEL_RESIZE =
  * The strip used to run edge to edge with a hairline under it, which made it
  * chrome bolted to the panel's top rather than part of the column. It is a
  * plate now: the same corner as every section under it (`rounded-lg`, matching
- * INFO_LIST_CLASS), so it reads as the first element of the info column instead
+ * the panel plate in ui/section), so it reads as the first element of the info column instead
  * of a band across it.
  *
  * The margin is the column's own padding rather than a value of its own. The

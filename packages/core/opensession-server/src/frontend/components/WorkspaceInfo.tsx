@@ -1,3 +1,6 @@
+import * as stylex from "@stylexjs/stylex";
+import { section } from "../ui/section";
+import { sx } from "../ui/sx";
 import { AGENT_NAME, GITHUB_BOT_NAME } from "../lib/brand";
 import { BASE_PATH } from "../lib/base";
 import { commitPrompt } from "../lib/commit-prompt";
@@ -62,11 +65,7 @@ import {
   GIT_NOTE,
   GIT_ROW,
 } from "../lib/pr-tone-classes";
-import {
-  INFO_LABEL_CLASS,
-  INFO_LIST_CLASS,
-  INFO_SECTION_CLASS,
-} from "../lib/session-viewer-classes";
+
 import { openLightbox } from "../lib/media-lightbox";
 import { SandboxBadge } from "./SandboxBadge";
 import { WorkspaceCollaborators } from "./WorkspaceCollaborators";
@@ -763,13 +762,13 @@ function AgentReviewCard({
   const primaryLabel = busy ? "Starting…" : canFix ? "Fix" : "Review";
 
   return (
-    <div data-agent-score className={INFO_SECTION_CLASS}>
+    <div data-agent-score {...stylex.props(section.panelStack)}>
       <div className="flex items-center gap-2">
         {/* One section for both reviewers: the agent's reading and the
 				    teammate's request are the same question, so they share a label
 				    and a plate rather than sitting in two sections that each say
 				    "review". Who each row is about is on the row. */}
-        <div className={INFO_LABEL_CLASS}>Review</div>
+        <div {...stylex.props(section.label, section.panelLabel)}>Review</div>
         {actionable && (
           <Menu.Root>
             <Menu.Trigger
@@ -810,7 +809,7 @@ function AgentReviewCard({
 			    wider, to keep two status bands from reading as one striped
 			    block; at most one row carries a band now, so the section goes
 			    back to the panel's own list grammar. */}
-      <div className={INFO_LIST_CLASS}>
+      <div {...stylex.props(section.panelPlate)}>
         <div className={cn(GIT_ROW, "rounded-md py-2", reviewBand(rowTone))}>
           <Popover.Root>
             <Popover.Trigger
@@ -1335,9 +1334,11 @@ function GitStatusRows({
   }
 
   return (
-    <div className={INFO_SECTION_CLASS}>
-      <div className={INFO_LABEL_CLASS}>Uncommitted</div>
-      <div className={INFO_LIST_CLASS}>
+    <div {...stylex.props(section.panelStack)}>
+      <div {...stylex.props(section.label, section.panelLabel)}>
+        Uncommitted
+      </div>
+      <div {...stylex.props(section.panelPlate)}>
         <div className={`${GIT_ROW} py-2`}>
           <span className={`${GIT_DOT} ${GIT_DOT_BG.yellow}`} aria-hidden />
           <span className={GIT_LABEL}>
@@ -1391,7 +1392,7 @@ type StripItem = {
 function MediaStrip({ items }: { items: StripItem[] }) {
   return (
     <div
-      // The same card the neighbouring lists sit on (INFO_LIST_CLASS), laid
+      // The same card the neighbouring lists sit on (the panel plate, ui/section), laid
       // out as a scroller, spelled out rather than composed so its overflow
       // isn't fighting that constant's `overflow-hidden`. Frames scroll
       // *inside* the card, so the panel's padding is there on both sides at
@@ -1636,9 +1637,7 @@ export function WorkspaceInfo({
     />
   );
 
-  // `workspace-info-panel` is a DOM hook, not styling: the phone session-info
-  // page reaches it from an ancestor — `[&_.workspace-info-panel]:pt-0` in
-  // INFO_OVERVIEW (lib/session-viewer-classes).
+  // `workspace-info-panel` is a bare hook on the panel's root.
   return (
     <div className="workspace-info-panel flex flex-col gap-4 px-2 pb-[22px] pt-3">
       {/* Both reviewers in one section. With a PR the agent's card owns the
@@ -1654,9 +1653,9 @@ export function WorkspaceInfo({
           {reviewerRow}
         </AgentReviewCard>
       ) : (
-        <div className={INFO_SECTION_CLASS}>
-          <div className={INFO_LABEL_CLASS}>Review</div>
-          <div className={INFO_LIST_CLASS}>{reviewerRow}</div>
+        <div {...stylex.props(section.panelStack)}>
+          <div {...stylex.props(section.label, section.panelLabel)}>Review</div>
+          <div {...stylex.props(section.panelPlate)}>{reviewerRow}</div>
         </div>
       )}
       <WorkspaceCollaborators
@@ -1675,11 +1674,12 @@ export function WorkspaceInfo({
       {hasBody ? (
         <div className="grid gap-4">
           {comments.length > 0 && (
-            <div className={INFO_SECTION_CLASS}>
+            <div {...stylex.props(section.panelStack)}>
               <div
-                className={cn(
-                  INFO_LABEL_CLASS,
-                  "flex items-center justify-between gap-2",
+                {...stylex.props(
+                  section.label,
+                  section.panelLabel,
+                  section.panelLabelRow,
                 )}
               >
                 <span>
@@ -1698,7 +1698,7 @@ export function WorkspaceInfo({
                   </button>
                 )}
               </div>
-              <div className={INFO_LIST_CLASS}>
+              <div {...stylex.props(section.panelPlate)}>
                 {(commentsExpanded
                   ? comments.slice().reverse()
                   : comments.slice(-COMMENT_PREVIEW).reverse()
@@ -1726,9 +1726,11 @@ export function WorkspaceInfo({
             </div>
           )}
           {commits.length > 0 && (
-            <div className={INFO_SECTION_CLASS}>
-              <div className={INFO_LABEL_CLASS}>Committed</div>
-              <div className={INFO_LIST_CLASS}>
+            <div {...stylex.props(section.panelStack)}>
+              <div {...stylex.props(section.label, section.panelLabel)}>
+                Committed
+              </div>
+              <div {...stylex.props(section.panelPlate)}>
                 {commits.map((commit) => (
                   <CommitRow key={commit.sha} commit={commit} />
                 ))}
@@ -1736,11 +1738,12 @@ export function WorkspaceInfo({
             </div>
           )}
           {changed.length > 0 && (
-            <div className={INFO_SECTION_CLASS}>
+            <div {...stylex.props(section.panelStack)}>
               <div
-                className={cn(
-                  INFO_LABEL_CLASS,
-                  "flex items-center justify-between gap-2",
+                {...stylex.props(
+                  section.label,
+                  section.panelLabel,
+                  section.panelLabelRow,
                 )}
               >
                 <span>
@@ -1755,7 +1758,7 @@ export function WorkspaceInfo({
                   )}
                 </span>
               </div>
-              <div className={INFO_LIST_CLASS}>
+              <div {...stylex.props(section.panelPlate)}>
                 {changed.slice(0, FILE_PREVIEW).map((f) => (
                   <FileRow
                     key={f.path}
@@ -1778,16 +1781,17 @@ export function WorkspaceInfo({
             </div>
           )}
           {media.length > 0 && (
-            <div className={INFO_SECTION_CLASS}>
+            <div {...stylex.props(section.panelStack)}>
               {/* The strip shows recordings too, but screenshots are what
 							    people call the set, so that is the word to head it with.
 							    What separates this section from the assets below it is
 							    still the source: one is what appeared in the conversation,
 							    the other is what the session wrote. */}
               <div
-                className={cn(
-                  INFO_LABEL_CLASS,
-                  "flex items-center justify-between gap-2",
+                {...stylex.props(
+                  section.label,
+                  section.panelLabel,
+                  section.panelLabelRow,
                 )}
               >
                 <span>Screenshots</span>
@@ -1807,11 +1811,11 @@ export function WorkspaceInfo({
             </div>
           )}
           {assets.length > 0 && (
-            <div className={INFO_SECTION_CLASS}>
+            <div {...stylex.props(section.panelStack)}>
               <div
-                className={cn(
-                  INFO_LABEL_CLASS,
-                  "group/assets flex items-center justify-between gap-2",
+                {...sx(
+                  [section.label, section.panelLabel, section.panelLabelRow],
+                  "group/assets",
                 )}
               >
                 <span>Assets</span>
@@ -1841,7 +1845,7 @@ export function WorkspaceInfo({
                   }))}
                 />
               ) : (
-                <div className={INFO_LIST_CLASS}>
+                <div {...stylex.props(section.panelPlate)}>
                   {assets.map((a) => (
                     <button
                       key={a.path}

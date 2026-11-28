@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { section } from "../ui/section";
 import { useState } from "react";
 import {
   addWorkspaceCollaboratorApi,
@@ -11,11 +13,7 @@ import {
   GIT_LABEL,
   GIT_ROW,
 } from "../lib/pr-tone-classes";
-import {
-  INFO_LABEL_CLASS,
-  INFO_LIST_CLASS,
-  INFO_SECTION_CLASS,
-} from "../lib/session-viewer-classes";
+
 import {
   publishWorkspaceRecord,
   useWorkspaceRecord,
@@ -147,9 +145,11 @@ export function WorkspaceCollaborators({
     ? collaborators.map((c) => c.name).join(", ")
     : "Only the creator";
   return (
-    <div className={INFO_SECTION_CLASS}>
-      <div className={INFO_LABEL_CLASS}>Collaborators</div>
-      <div className={INFO_LIST_CLASS}>
+    <div {...stylex.props(section.panelStack)}>
+      <div {...stylex.props(section.label, section.panelLabel)}>
+        Collaborators
+      </div>
+      <div {...stylex.props(section.panelPlate)}>
         <div className={`${GIT_ROW} rounded-md py-2`}>
           {shown.length ? (
             <span className="flex shrink-0 -space-x-1.5">
