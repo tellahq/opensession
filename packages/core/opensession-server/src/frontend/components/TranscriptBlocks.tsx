@@ -18,7 +18,7 @@ import {
   collectProgressUpdates,
   foldStatuses,
   parseProgressUpdate,
-  splitLeadStatus,
+  withoutStatusLines,
   type FoldStatus,
   type ProgressGroup,
   type ProgressUpdate,
@@ -554,29 +554,30 @@ function foldReportedTasks(
   return folded;
 }
 
-/** A reply that opens with a status line ("✓ **Header icons**: Live", a
- * blank line, then prose) shows only its prose: the prose already says the
+/** A reply that opens or ends with a status line ("✓ **Header icons**:
+ * Live", a blank line, then prose, or the other way round) shows only its
+ * prose: the prose already says the
  * outcome, and the bold, green line above it only repeated it. The footer
  * keeps the original entry, so Copy copies the whole message. */
 // Per entry, so a rerender hands MessageBubble the same entry object and its
 // memo comparator can bail.
-const leadStatusCache = new WeakMap<TranscriptEntry, TranscriptEntry | null>();
+const statusLinesCache = new WeakMap<TranscriptEntry, TranscriptEntry | null>();
 
-function withoutLeadStatus(entry: TranscriptEntry) {
-  let cached = leadStatusCache.get(entry);
+function withoutStatusLinesOf(entry: TranscriptEntry) {
+  let cached = statusLinesCache.get(entry);
   if (cached === undefined) {
-    const split = splitLeadStatus(entry);
-    cached = split ? { ...entry, content: split.rest } : null;
-    leadStatusCache.set(entry, cached);
+    const rest = withoutStatusLines(entry);
+    cached = rest ? { ...entry, content: rest } : null;
+    statusLinesCache.set(entry, cached);
   }
   return cached;
 }
 
-function dropLeadStatuses(blocks: RenderBlock[]): RenderBlock[] {
+function dropStatusLines(blocks: RenderBlock[]): RenderBlock[] {
   let dropped: RenderBlock[] | null = null;
   for (const [i, block] of blocks.entries()) {
     if (block.kind !== "entry" || block.entry.type !== "assistant") continue;
-    const entry = withoutLeadStatus(block.entry);
+    const entry = withoutStatusLinesOf(block.entry);
     if (!entry) continue;
     dropped ??= [...blocks];
     dropped[i] = { ...block, entry };
@@ -1028,7 +1029,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       at++;
     }
   }
-  const groupedBlocks = dropLeadStatuses(
+  const groupedBlocks = dropStatusLines(
     projectProgressBlocks(
       groupCheckBacks(
         groupReviewLoops(foldReportedTasks(blocks, progressUpdates)),

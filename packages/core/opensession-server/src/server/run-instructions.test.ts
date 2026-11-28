@@ -218,7 +218,7 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("follow-ups report only what changed");
     expect(prompt).toContain("do not restate the problem they reported");
     expect(prompt).toContain("no pointers to proof");
-    expect(prompt).toContain("Never open a reply with a status line");
+    expect(prompt).toContain("Never write a status line");
     expect(prompt).toContain("never restate an earlier answer");
     expect(prompt).toContain(
       "verification limits and required decisions explicit",

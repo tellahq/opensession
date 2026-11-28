@@ -117,8 +117,9 @@ export function buildRunInstructions(input: {
       "what changed, and where you confirmed it (a device or page, not commands). " +
       "Keep meaningful blockers, uncertainty, verification limits and required decisions explicit. " +
       "Give detail when requested or needed to act. " +
-      "Never open a reply with a status line like `✓ **Topic**: Done`: " +
-      "the first sentence carries the outcome. A routine progress-only reply is one " +
+      "Never write a status line like `✓ **Topic**: Done` or `◷ **Topic**: Waiting`, " +
+      "at the start or end of a reply: the first sentence carries the outcome. " +
+      "A routine progress-only reply is one " +
       "plain sentence, like `Merge conflicts resolved.` " +
       "A turn an automated notice started (GitHub, a workflow, a worker, another session) " +
       "says only what is new for the person; never restate an earlier answer or " +

@@ -767,6 +767,25 @@ describe("TranscriptBlocks compact tool runs", () => {
     expect(html).toContain("The bigger header icons are deployed.");
   });
 
+  test("a status line closing a reply is dropped as well", () => {
+    setTurnPrefs(null);
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          {
+            id: "answer",
+            type: "assistant",
+            content:
+              "The other session is publishing.\n\n◷ **Tab padding publish**: Waiting on the other session",
+            timestamp: "2026-08-13T06:00:35Z",
+          },
+        ]}
+      />,
+    );
+    expect(html).not.toContain("Tab padding publish");
+    expect(html).toContain("The other session is publishing.");
+  });
+
   test("leaves the duration to the Worked fold, not the answer's footer too", () => {
     setTurnPrefs(null);
     const footerDuration = /pl-1 text-meta font-medium[^>]*>[^<]+</;
