@@ -23,28 +23,27 @@
   margin: 0 0 16px;
 }
 
+/* The ladder is chat's shifted up one step (base-markdown.css): page,
+   section, dialog, body. Same heading leading and tracking rule. */
 .markdown.markdown-doc :is(h1, h2, h3, h4) {
   color: var(--text);
   font-weight: 600;
+  line-height: var(--prose-lead-heading);
   text-wrap: balance;
 }
 .markdown.markdown-doc h1 {
   margin: 0 0 12px;
-  font-size: calc(var(--type-page-title) + 6px);
-  line-height: 1.2;
-  letter-spacing: -0.028em;
+  font-size: var(--type-page-title);
+  letter-spacing: var(--prose-track-title);
 }
 .markdown.markdown-doc h2 {
   margin: 40px 0 10px;
   font-size: var(--type-section-title);
-  line-height: 1.3;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--prose-track-title);
 }
 .markdown.markdown-doc h3 {
   margin: 28px 0 6px;
-  font-size: calc(var(--type-body) + 1px);
-  line-height: 1.4;
-  letter-spacing: -0.012em;
+  font-size: var(--type-dialog-title);
 }
 .markdown.markdown-doc h4 {
   margin: 24px 0 4px;
@@ -54,7 +53,6 @@
 /* The lead paragraph under the title reads as a subtitle. */
 .markdown.markdown-doc > h1 + p {
   margin-bottom: 8px;
-  font-size: calc(var(--type-body) + 1px);
   color: var(--text-dim);
 }
 .markdown.markdown-doc > :first-child {
@@ -80,7 +78,6 @@
 }
 .markdown.markdown-doc ol > li::marker {
   font-variant-numeric: tabular-nums;
-  font-size: 0.93em;
 }
 
 /* Task lists: the checkbox is the marker. */
@@ -139,8 +136,6 @@
   margin: 4px 0 20px;
   padding: 14px 16px;
   border-radius: calc(12px * var(--rf));
-  font-size: 0.86em;
-  line-height: 1.65;
 }
 .markdown.markdown-doc .md-code-wrap > pre {
   padding-right: var(--code-pad-right);
@@ -166,7 +161,7 @@
   corner-shape: var(--cs);
   border-collapse: separate;
   border-spacing: 0;
-  font-size: calc(var(--type-body) - 1px);
+  font-size: var(--type-label);
 }
 .markdown.markdown-doc th {
   padding: 8px 20px 8px 14px;
@@ -174,7 +169,6 @@
   border-bottom: 1px solid var(--border);
   font-size: var(--type-label);
   color: var(--text-dim);
-  letter-spacing: 0;
 }
 .markdown.markdown-doc td {
   padding: 9px 20px 9px 14px;

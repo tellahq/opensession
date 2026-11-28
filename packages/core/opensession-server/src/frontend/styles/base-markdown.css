@@ -7,6 +7,19 @@
    utility classes on. Element selectors under `.markdown` are the only
    way to reach it, and that stays true however far the migration goes.
    ───────────────────────────────────────────────────────────── */
+/* The prose ladder. Markdown is styled by element selectors, out of reach of
+   the StyleX tokens, so its steps are named here once and mirror them:
+   tracking `title` and `tight`, leading `tight` and `snug` (ui/tokens.stylex).
+   Sizes come from the --type-* scale; code is one step down from its text. */
+:root {
+  --prose-track-title: -0.02em;
+  --prose-track: -0.01em;
+  --prose-lead-heading: 1.25;
+  --prose-lead-note: 1.375;
+  --prose-lead-code: 1.55;
+  --prose-code: 0.9em;
+}
+
 /* Full automated-review preview: a readable long-form scale, bounded by the
    popover rather than the viewport, with the same theme tokens as markdown. */
 .review-preview-markdown.markdown {
@@ -18,8 +31,8 @@
   margin: 0 0 12px;
   font-size: var(--type-section-title);
   font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
+  line-height: var(--prose-lead-heading);
+  letter-spacing: var(--prose-track-title);
   color: var(--text);
   text-wrap: balance;
 }
@@ -99,8 +112,8 @@
   /* The same ratio the inline chip below uses, so a block and an inline run
 	   of code are one size, and both scale with the prose they sit in rather
 	   than pinning a second absolute size into the scale. */
-  font-size: 0.9em;
-  line-height: 1.55;
+  font-size: var(--prose-code);
+  line-height: var(--prose-lead-code);
 }
 
 /* An inline code chip is small enough that a 4px corner reads as a square
@@ -112,7 +125,7 @@
    sentence, and it is what made these read as slabs. */
 .markdown code {
   font-family: var(--mono);
-  font-size: 0.9em;
+  font-size: var(--prose-code);
   background: rgba(221, 225, 240, 0.07);
   border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
@@ -394,18 +407,17 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .markdown h3,
 .markdown h4 {
   margin: 16px 0 4px;
-  line-height: 1.3;
+  line-height: var(--prose-lead-heading);
   font-weight: 600;
-  letter-spacing: -0.012em;
+  letter-spacing: var(--prose-track);
   color: var(--text);
 }
 .markdown h1 {
   font-size: var(--type-section-title);
-  letter-spacing: -0.018em;
+  letter-spacing: var(--prose-track-title);
 }
 .markdown h2 {
   font-size: var(--type-dialog-title);
-  letter-spacing: -0.016em;
 }
 /* The deepest two levels share the body size and are told apart by weight and
    the space above them, which is what the scale has: section / dialog / body.
@@ -448,7 +460,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   text-align: left;
   font-size: var(--type-meta);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--prose-track);
   color: var(--text-faint);
   border-bottom: 1px solid var(--border-strong);
   padding: 4px 16px 5px 0;
@@ -567,8 +579,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 .md-figcaption {
   margin-top: 6px;
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--type-meta);
+  line-height: var(--prose-lead-note);
   color: var(--text-dim);
 }
 @media (max-width: 720px) {
@@ -683,7 +695,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 .md-chart-canvas .vega-bindings {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--type-meta);
   color: var(--text-dim);
 }
 /* vega-tooltip's shared element: its stock stylesheet is disabled so the
@@ -694,8 +706,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   z-index: var(--layer-inline-float);
   max-width: 320px;
   padding: 6px 8px;
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: var(--type-meta);
+  line-height: var(--prose-lead-note);
   color: var(--tooltip-fg);
   background: var(--tooltip-bg);
   border-radius: calc(7px * var(--rf));
@@ -709,7 +721,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 #vg-tooltip-element h2 {
   margin: 0 0 4px;
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 600;
 }
 #vg-tooltip-element table {
@@ -920,12 +932,12 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .md-code-settings-title {
   font-size: var(--type-label);
   font-weight: 600;
-  line-height: 1.35;
+  line-height: var(--prose-lead-note);
 }
 .md-code-settings-description {
   margin-top: 2px;
   font-size: var(--type-meta);
-  line-height: 1.4;
+  line-height: var(--prose-lead-note);
   color: var(--text-dim);
 }
 
@@ -1461,7 +1473,7 @@ a.pr-ref.pr-ref-repeat:active {
 a.commit-ref,
 span.commit-ref {
   font-family: var(--mono);
-  font-size: 0.9em;
+  font-size: var(--prose-code);
   padding: 1.5px 6px;
   border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
@@ -1660,7 +1672,7 @@ html[data-theme="light"] span.commit-ref:hover {
   border-radius: 999px;
   background: var(--bg-panel);
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 500;
   cursor: pointer;
   opacity: 0;
@@ -1717,7 +1729,7 @@ html[data-theme="light"] span.commit-ref:hover {
   padding-left: 8px;
   border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-style: normal;
   color: var(--text-dim);
   white-space: normal;

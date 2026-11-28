@@ -162,6 +162,11 @@ property, like the side panel plate) keep working unchanged.
    - A count on an icon control is `<CountBadge>` (`ui/badge.tsx`): 16px,
      18px on a phone, 11px semibold, a 2px cutout ring. `tone="warning"`
      sits on yellow with `--on-yellow` ink (white in light, dark in dark).
+   - Prose (`styles/base-markdown.css`) names its steps once in `--prose-*`
+     variables that mirror the StyleX tokens. Chat headings run section,
+     dialog, body; a document (`markdown-doc.css`) runs one step up: page,
+     section, dialog, body. Every heading takes leading 1.25, tracking -0.02em
+     at section size and up, -0.01em below. Code is 0.9em at 1.55.
 
 ### Open decisions
 
