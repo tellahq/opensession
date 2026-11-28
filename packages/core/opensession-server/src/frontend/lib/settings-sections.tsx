@@ -2,7 +2,6 @@ import React from "react";
 import * as IconLibrary from "../components/icons";
 import {
   IconArchive,
-  IconArrowDown,
   IconBandAid,
   IconBell,
   IconBolt,
@@ -46,24 +45,22 @@ export type SettingsSectionKey =
   | "notifications"
   | "shortcuts"
   | "general"
-  | "setup"
-  | "repos"
   | "members"
-  | "authentication"
+  | "repos"
   | "providers"
+  | "connections"
+  | "integrations"
+  | "library"
+  | "memory"
+  | "setup"
   | "sandboxes"
   | "runners"
-  | "library"
-  | "integrations"
-  | "connections"
-  | "memory"
-  | "storage"
-  | "ingress"
   | "prewarming"
+  | "ingress"
+  | "storage"
   | "deploys"
   | "papercuts"
   | "audit"
-  | "downloads"
   | ToolSectionKey;
 
 export const TOOL_SECTIONS = new Set<SettingsSectionKey>([
@@ -79,6 +76,9 @@ interface SettingsSection {
   icon: React.ReactElement<{ size?: number }>;
 }
 
+// Personal is yours alone. Organization is what every session shares.
+// Infrastructure is where sessions run. Automation is the work the instance
+// does on its own, and Activity is the record it leaves.
 export const SECTIONS: SettingsSection[] = [
   {
     key: "myAccounts",
@@ -111,10 +111,10 @@ export const SECTIONS: SettingsSection[] = [
     icon: <IconHome />,
   },
   {
-    key: "setup",
-    label: "Setup",
+    key: "members",
+    label: "Members",
     group: "Organization",
-    icon: <IconChecklist />,
+    icon: <IconPeople />,
   },
   {
     key: "repos",
@@ -123,46 +123,10 @@ export const SECTIONS: SettingsSection[] = [
     icon: <IconBranches />,
   },
   {
-    key: "members",
-    label: "Members",
-    group: "Organization",
-    icon: <IconPeople />,
-  },
-  {
-    key: "authentication",
-    label: "Authentication",
-    group: "Organization",
-    icon: <IconShieldCheck />,
-  },
-  {
     key: "providers",
-    label: "Providers",
+    label: "Models",
     group: "Organization",
     icon: <IconProviders />,
-  },
-  {
-    key: "sandboxes",
-    label: "Sandboxes",
-    group: "Organization",
-    icon: <IconBox />,
-  },
-  {
-    key: "runners",
-    label: "Runners",
-    group: "Organization",
-    icon: <IconServer />,
-  },
-  {
-    key: "library",
-    label: "Library",
-    group: "Organization",
-    icon: <IconBook />,
-  },
-  {
-    key: "integrations",
-    label: "Integrations",
-    group: "Organization",
-    icon: <IconPlug />,
   },
   {
     key: "connections",
@@ -171,28 +135,46 @@ export const SECTIONS: SettingsSection[] = [
     icon: <IconConnections />,
   },
   {
+    key: "integrations",
+    label: "Integrations",
+    group: "Organization",
+    icon: <IconPlug />,
+  },
+  {
+    key: "library",
+    label: "Library",
+    group: "Organization",
+    icon: <IconBook />,
+  },
+  {
     key: "memory",
-    label: "Memories",
+    label: "Memory",
     group: "Organization",
     icon: <IconDatabase />,
   },
   {
-    key: "automations",
-    label: "Automations",
-    group: "Automation",
-    icon: <IconClock />,
+    key: "setup",
+    label: "Setup",
+    group: "Organization",
+    icon: <IconChecklist />,
   },
   {
-    key: "goals",
-    label: "Goals",
-    group: "Automation",
-    icon: <IconTarget />,
+    key: "sandboxes",
+    label: "Sandboxes",
+    group: "Infrastructure",
+    icon: <IconBox />,
   },
   {
-    key: "security",
-    label: "Security",
-    group: "Automation",
-    icon: <IconShieldCheck />,
+    key: "runners",
+    label: "Runners",
+    group: "Infrastructure",
+    icon: <IconServer />,
+  },
+  {
+    key: "prewarming",
+    label: "Acceleration",
+    group: "Infrastructure",
+    icon: <IconBolt />,
   },
   {
     key: "ingress",
@@ -207,16 +189,23 @@ export const SECTIONS: SettingsSection[] = [
     icon: <IconArchive />,
   },
   {
-    key: "prewarming",
-    label: "Acceleration",
-    group: "Infrastructure",
-    icon: <IconBolt />,
-  },
-  {
     key: "deploys",
     label: "Deploys",
     group: "Infrastructure",
     icon: <IconRocket />,
+  },
+  {
+    key: "automations",
+    label: "Automations",
+    group: "Automation",
+    icon: <IconClock />,
+  },
+  { key: "goals", label: "Goals", group: "Automation", icon: <IconTarget /> },
+  {
+    key: "security",
+    label: "Security",
+    group: "Automation",
+    icon: <IconShieldCheck />,
   },
   {
     key: "papercuts",
@@ -229,12 +218,6 @@ export const SECTIONS: SettingsSection[] = [
     label: "Audit log",
     group: "Activity",
     icon: <IconFileText2 />,
-  },
-  {
-    key: "downloads",
-    label: "Downloads",
-    group: "Activity",
-    icon: <IconArrowDown />,
   },
 ];
 

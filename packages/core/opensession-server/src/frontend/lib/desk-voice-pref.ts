@@ -1,4 +1,4 @@
-// Desk voice mode toggle (Settings → Desk, default off). A makeUserPref
+// Desk voice mode toggle (Settings → Preferences → Desk, default off). A makeUserPref
 // instance — see lib/user-pref for the server-side ui-prefs hydrate pattern;
 // mounted surfaces flip live on the change event.
 

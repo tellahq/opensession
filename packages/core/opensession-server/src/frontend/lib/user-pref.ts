@@ -4,7 +4,7 @@
 // paint), the server hydrates on load / user switch and emits the pref's
 // change event so mounted surfaces flip live.
 //
-// The concrete preference modules (lib/vim-pref, lib/turn-activity, …) are
+// The concrete preference modules (lib/live-typing-pref, lib/turn-activity, …) are
 // thin instantiations of this factory; lib/busy-send-pref keeps its own copy
 // of the pattern because it manages two keys behind one change event with a
 // single batched hydrate.

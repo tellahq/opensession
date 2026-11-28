@@ -42,9 +42,7 @@ import { Connections } from "./Connections";
 import { IconChevronLeft, IconChevronRight, IconSearch, IconX } from "./icons";
 import { MyAccountsPanel } from "./MyAccounts";
 import { AuditPanel } from "./settings/AuditPanel";
-import { AuthenticationPanel } from "./settings/AuthenticationPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
-import { DownloadsPanel } from "./settings/DownloadsPanel";
 import { GeneralPanel } from "./settings/GeneralPanel";
 import { IntegrationsPanel } from "./settings/IntegrationsPanel";
 import { IngressPanel } from "./settings/IngressPanel";
@@ -64,21 +62,11 @@ import { RunnersPanel } from "./settings/RunnersPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { SetupPanel } from "./Setup";
 
-// The full-window Settings surface: a left sub-nav + a scrolling body, reached
-// from the "Settings" item in the account menu. Designed to grow — each area is
-// just another entry in SECTIONS and a matching panel below. The "Tools" group
-// holds the app's tool surfaces (Automations, Goals, …) — those render at their
-// own routes (<base>/automations, …) with this surface as chrome, so the
-// section is controlled by the router, not local state.
-//
-// Groups run from what one person owns to what the whole instance does:
-// "Personal" is yours alone: who sessions act as, how the app looks and
-// behaves for you, and what it notifies you about. "Organization" is shared
-// config every session runs under. "Automation" is the standing work the
-// instance does on its own:
-// those are the tool surfaces, grouped by what they are rather than sold as
-// the headline; "Infrastructure" is the machinery prepared ahead of a run; and
-// "Activity" is the read-only record agents leave behind.
+// The full-window Settings surface: a left sub-nav and a scrolling body. Each
+// area is an entry in SECTIONS (lib/settings-sections) and a panel below. The
+// Automation group holds the tool surfaces (Automations, Goals, Security),
+// which render at their own routes with this surface as chrome, so the section
+// is controlled by the router, not local state.
 
 // The nav table itself lives in lib/settings-sections, because the command
 // palette needs the same list and importing this whole component tree to read
@@ -244,11 +232,9 @@ function SectionPanel({
       )}
       {section === "repos" && <ReposPanel />}
       {section === "members" && <MembersPanel />}
-      {section === "authentication" && <AuthenticationPanel />}
       {section === "library" && <LibraryPanel />}
       {section === "integrations" && <IntegrationsPanel />}
       {section === "audit" && <AuditPanel />}
-      {section === "downloads" && <DownloadsPanel />}
       {section === "providers" && <ProvidersPanel />}
       {section === "sandboxes" && <SandboxesPanel />}
       {section === "runners" && <RunnersPanel />}

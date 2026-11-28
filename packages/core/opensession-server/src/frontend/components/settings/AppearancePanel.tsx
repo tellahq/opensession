@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { IconCheck } from "../icons";
-import { fetchFeeds, type RepoInfo } from "../../lib/api";
-import { errorMessage } from "../../lib/error-message";
 import {
   ACCENT_THEME_OPTIONS,
   getAccentTheme,
@@ -12,25 +10,12 @@ import {
   type AccentTheme,
 } from "../../lib/accent-theme";
 import {
-  onSidebarFeedsChanged,
-  readHiddenSidebarFeeds,
-  setSidebarFeedVisible,
-} from "../../lib/sidebar-feeds";
-import {
-  onSidebarToolsChanged,
-  readHiddenSidebarTools,
-  setSidebarToolVisible,
-  toolFitsViewport,
-  SIDEBAR_TOOL_IDS,
-  SIDEBAR_TOOL_LABELS,
-} from "../../lib/sidebar-tools";
-import { useIsPhone } from "../../hooks/useIsPhone";
-import {
   getDiffPalette,
   onDiffPaletteChanged,
   setDiffPalette,
   type DiffPalette,
 } from "../../lib/diff-palette";
+import { setNewLayoutPref, useNewLayoutPref } from "../../lib/new-layout-pref";
 import {
   getThemePref,
   effectiveTheme,
@@ -38,69 +23,21 @@ import {
   setThemePref,
   type ThemePref,
 } from "../../lib/theme";
-import type { FeedDescriptor } from "../../lib/types";
-import {
-  setFilter,
-  useSidebarFilter,
-  type SortBy,
-} from "../../lib/sidebar-filter";
-import {
-  DENSITY_OPTIONS,
-  getSidebarDensity,
-  onSidebarDensityChanged,
-  setSidebarDensity,
-  type SidebarDensity,
-} from "../../lib/sidebar-density";
-import {
-  getWsTimePref,
-  onWsTimeChanged,
-  setWsTimePref,
-  type WsTimePref,
-} from "../../lib/workspace-time";
-import {
-  PLAIN_ID,
-  SUPPORT_SURFACE_OPTIONS,
-  setSupportSurface,
-  supportSurfaceOf,
-} from "../../lib/support-surface";
 import {
   SettingCard,
-  SettingGroup,
   SettingsGroupLabel,
   SettingsSection,
 } from "../../ui/settings";
-import { Segmented, SegmentedOption } from "../../ui/segmented";
-import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
-import { usePeople } from "../../lib/people";
-import { useCurrentUser } from "../UserPicker";
-import { useAutomationOverview } from "../../lib/automation-overview";
-import { AGENT_NAME } from "../../lib/brand";
-import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
-import {
-  GROUP_BY_OPTIONS,
-  LAST_USED_TIME_OPTIONS,
-  personFilterOptions,
-  PR_FILTER_OPTIONS,
-  repoFilterOptions,
-} from "../sidebar/filter-options";
 import { Tooltip } from "../../ui/tooltip";
-import { Select, SettingRow } from "./shared";
+import { SettingRow } from "./shared";
 
-// The look of the app, as it appears inside Settings → Preferences. These used
-// to be their own Appearance section; they are per-device choices about the
-// same surfaces Preferences already covers, so they sit here rather than one
-// nav row away.
+// The look of the app, at the top of Settings → Preferences.
 
 const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
   { value: "system", label: "System" },
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
-];
-
-const SORT_OPTIONS: { value: SortBy; label: string }[] = [
-  { value: "updated", label: "Updated" },
-  { value: "created", label: "Created" },
 ];
 
 type ThemeMockStyle = React.CSSProperties & {
@@ -257,6 +194,7 @@ export function AppearanceSection() {
   );
   const [accent, setAccent] = useState<AccentTheme>(getAccentTheme);
   useEffect(() => onAccentThemeChanged(() => setAccent(getAccentTheme())), []);
+  const newLayout = useNewLayoutPref();
   const [diffPalette, setDiffPaletteState] =
     useState<DiffPalette>(getDiffPalette);
   useEffect(
@@ -315,11 +253,11 @@ export function AppearanceSection() {
       <div className="mt-3">
         <SettingCard>
           <SettingRow
-            title="Color-blind diff palette"
-            desc="Use blue and orange instead of green and red in code diffs."
+            title="Color-blind diffs"
+            desc="Blue and orange instead of green and red."
             control={
               <Switch
-                aria-label="Color-blind diff palette"
+                aria-label="Color-blind diffs"
                 checked={diffPalette === "colorblind"}
                 onCheckedChange={(checked) => {
                   const next: DiffPalette = checked ? "colorblind" : "default";
@@ -329,297 +267,19 @@ export function AppearanceSection() {
               />
             }
           />
-        </SettingCard>
-      </div>
-    </>
-  );
-}
-
-/** The same sidebar filter controls, shown as Settings rows. */
-export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
-  const filter = useSidebarFilter();
-  const currentUser = useCurrentUser();
-  const roster = usePeople();
-  const automationOverview = useAutomationOverview("settings");
-  const hasUnownedAutomation = Array.from(automationOverview.values()).some(
-    (automation) => !automation.owner,
-  );
-  const people = roster.map((person) => ({
-    key:
-      person.name.trim().split(/\s+/)[0]?.toLowerCase() ||
-      person.name.toLowerCase(),
-    label: person.name,
-  }));
-  if (
-    (hasUnownedAutomation || filter.person === AGENT_PERSON_KEY) &&
-    !people.some(({ key }) => key === AGENT_PERSON_KEY)
-  )
-    people.push({ key: AGENT_PERSON_KEY, label: AGENT_NAME });
-  if (
-    !["me", "everyone", "unassigned"].includes(filter.person) &&
-    !people.some(({ key }) => key === filter.person)
-  )
-    people.push({ key: filter.person, label: filter.person });
-
-  const availableRepos = repos.map(({ id }) => ({ id }));
-  if (
-    filter.repo !== "all" &&
-    !availableRepos.some(({ id }) => id === filter.repo)
-  )
-    availableRepos.push({ id: filter.repo });
-  const repoOptions = repoFilterOptions(availableRepos);
-  const personOptions = personFilterOptions({ people, currentUser });
-
-  const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
-  useEffect(
-    () => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
-    [],
-  );
-  const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
-  useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
-
-  return (
-    <>
-      {/* These rows describe one default view of the sidebar. */}
-      <SettingGroup>
-        <SettingRow
-          title="Group by"
-          control={
-            <Select
-              label="Group by"
-              value={filter.groupBy}
-              options={GROUP_BY_OPTIONS}
-              onChange={(groupBy) => setFilter({ groupBy })}
-            />
-          }
-        />
-        <SettingRow
-          title="Group by project"
-          control={
-            <Switch
-              aria-label="Group by project"
-              checked={filter.byProject}
-              onCheckedChange={(byProject) => setFilter({ byProject })}
-            />
-          }
-        />
-        <SettingRow
-          title="Repo"
-          control={
-            <Select
-              label="Repo"
-              value={filter.repo}
-              options={repoOptions}
-              onChange={(repo) => setFilter({ repo })}
-            />
-          }
-        />
-        <SettingRow
-          title="Person"
-          control={
-            <Select
-              label="Person"
-              value={filter.person}
-              options={personOptions}
-              onChange={(person) => setFilter({ person })}
-            />
-          }
-        />
-        {filter.groupBy === "status" && (
           <SettingRow
-            title="Sort by"
-            control={
-              <Select
-                label="Sort by"
-                value={filter.sort}
-                options={SORT_OPTIONS}
-                onChange={(sort) => setFilter({ sort })}
-              />
-            }
-          />
-        )}
-        <SettingRow
-          title="Pull requests"
-          control={
-            <Select
-              label="Pull requests"
-              value={filter.prs}
-              options={PR_FILTER_OPTIONS}
-              onChange={(prs) => setFilter({ prs })}
-            />
-          }
-        />
-        <SettingRow
-          title="Show auto created"
-          control={
-            <Switch
-              aria-label="Show auto created"
-              checked={filter.autoCreated === "show"}
-              onCheckedChange={(shown) =>
-                setFilter({ autoCreated: shown ? "show" : "hide" })
-              }
-            />
-          }
-        />
-        <SettingRow
-          title="Hide empty projects"
-          control={
-            <Switch
-              aria-label="Hide empty projects"
-              checked={filter.emptyProjects === "hide"}
-              onCheckedChange={(hide) =>
-                setFilter({ emptyProjects: hide ? "hide" : "show" })
-              }
-            />
-          }
-        />
-      </SettingGroup>
-      <SettingGroup>
-        <SettingRow
-          title="Row density"
-          control={
-            <Segmented
-              label="Sidebar row density"
-              value={density}
-              onValueChange={(value) => {
-                const option = DENSITY_OPTIONS.find(
-                  (candidate) => candidate.value === value,
-                );
-                if (option) setSidebarDensity(option.value);
-              }}
-            >
-              {DENSITY_OPTIONS.map(({ value, label, Icon }) => (
-                <SegmentedOption key={value} value={value}>
-                  <Icon size={20} />
-                  {label}
-                </SegmentedOption>
-              ))}
-            </Segmented>
-          }
-        />
-        <SettingRow
-          title="Show last used time"
-          control={
-            <Select
-              label="Show last used time"
-              value={wsTime}
-              options={LAST_USED_TIME_OPTIONS}
-              onChange={setWsTimePref}
-            />
-          }
-        />
-      </SettingGroup>
-    </>
-  );
-}
-
-/** Which tools and sources the sidebar carries, as its own card. */
-export function SidebarItemsSection() {
-  const isPhone = useIsPhone();
-  const [hiddenSidebarTools, setHiddenSidebarTools] = useState(
-    readHiddenSidebarTools,
-  );
-  const [sidebarFeeds, setSidebarFeeds] = useState<FeedDescriptor[]>([]);
-  const [sidebarFeedsError, setSidebarFeedsError] = useState<string | null>(
-    null,
-  );
-  const [hiddenSidebarFeeds, setHiddenSidebarFeeds] = useState(
-    readHiddenSidebarFeeds,
-  );
-  useEffect(() => {
-    let alive = true;
-    fetchFeeds()
-      .then((feeds) => {
-        if (alive) setSidebarFeeds(feeds);
-      })
-      .catch((error) => {
-        if (alive)
-          setSidebarFeedsError(
-            errorMessage(error, "Failed to load sidebar sources"),
-          );
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  useEffect(
-    () =>
-      onSidebarToolsChanged(() =>
-        setHiddenSidebarTools(readHiddenSidebarTools()),
-      ),
-    [],
-  );
-  useEffect(
-    () =>
-      onSidebarFeedsChanged(() =>
-        setHiddenSidebarFeeds(readHiddenSidebarFeeds()),
-      ),
-    [],
-  );
-
-  return (
-    <>
-      <SettingsGroupLabel>Show in sidebar</SettingsGroupLabel>
-      {sidebarFeedsError && <InlineAlert>{sidebarFeedsError}</InlineAlert>}
-      <SettingCard>
-        {/* Support is one decision, not two switches. Its tool and its
-				    sidebar band are the same queue reached two ways, so they are
-				    set together here and left out of the lists below. Only
-				    offered when Plain is actually connected: with no queue behind
-				    it there is nowhere for either surface to lead. */}
-        {sidebarFeeds.some((feed) => feed.id === PLAIN_ID) && (
-          <SettingRow
-            title="Support tickets"
-            desc="Choose where tickets appear."
-            control={
-              <Select
-                label="Where support tickets live"
-                value={supportSurfaceOf(
-                  !hiddenSidebarTools.has(PLAIN_ID),
-                  !hiddenSidebarFeeds.has(PLAIN_ID),
-                )}
-                options={SUPPORT_SURFACE_OPTIONS}
-                onChange={setSupportSurface}
-              />
-            }
-          />
-        )}
-        {SIDEBAR_TOOL_IDS.filter(
-          (toolId) => toolFitsViewport(toolId, isPhone) && toolId !== PLAIN_ID,
-        ).map((toolId) => (
-          <SettingRow
-            key={toolId}
-            title={SIDEBAR_TOOL_LABELS[toolId]}
+            title="New layout"
+            desc="Places in a minibar. Desktop only for now."
             control={
               <Switch
-                aria-label={`Show ${SIDEBAR_TOOL_LABELS[toolId]} in sidebar`}
-                checked={!hiddenSidebarTools.has(toolId)}
-                onCheckedChange={(visible) =>
-                  setSidebarToolVisible(toolId, visible)
-                }
+                aria-label="New layout"
+                checked={newLayout}
+                onCheckedChange={setNewLayoutPref}
               />
             }
           />
-        ))}
-        {sidebarFeeds
-          .filter((feed) => feed.id !== PLAIN_ID)
-          .map((feed) => (
-            <SettingRow
-              key={feed.id}
-              title={feed.title}
-              desc="Hidden sources stop refreshing."
-              control={
-                <Switch
-                  aria-label={`Show ${feed.title} in sidebar`}
-                  checked={!hiddenSidebarFeeds.has(feed.id)}
-                  onCheckedChange={(visible) =>
-                    setSidebarFeedVisible(feed.id, visible)
-                  }
-                />
-              }
-            />
-          ))}
-      </SettingCard>
+        </SettingCard>
+      </div>
     </>
   );
 }

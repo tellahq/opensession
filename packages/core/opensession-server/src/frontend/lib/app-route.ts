@@ -55,7 +55,6 @@ const SETTINGS_SECTIONS: ReadonlySet<string> = new Set<SettingsSectionKey>([
   "setup",
   "repos",
   "members",
-  "authentication",
   "providers",
   "sandboxes",
   "runners",
@@ -69,7 +68,6 @@ const SETTINGS_SECTIONS: ReadonlySet<string> = new Set<SettingsSectionKey>([
   "deploys",
   "papercuts",
   "audit",
-  "downloads",
 ]);
 const LEGACY_SETTINGS_SECTIONS = new Map<string, SettingsSectionKey>([
   ["appearance", "preferences"],
@@ -86,6 +84,8 @@ const LEGACY_SETTINGS_SECTIONS = new Map<string, SettingsSectionKey>([
   ["keychain", "myAccounts"],
   ["profile", "myAccounts"],
   ["identity", "general"],
+  ["authentication", "general"],
+  ["downloads", "myAccounts"],
 ]);
 
 /** The route that shows a Settings section. The tools that live in Settings

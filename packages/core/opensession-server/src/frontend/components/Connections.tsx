@@ -1682,8 +1682,8 @@ export function GithubAccounts({
             {!personal && (
               <SettingRowDescription className="leading-snug">
                 {active
-                  ? "Interactive sessions of a connected teammate open PRs as their own GitHub account. Trusted GitHub automations use the repository-scoped App credential."
-                  : "Off. Interactive sessions use the workspace credential. Configure the GitHub App in Settings → Integrations and the sign-in method in Settings → Authentication."}
+                  ? "Teammates' sessions open pull requests as themselves."
+                  : "Off. Sessions use the workspace credential. Turn on GitHub sign-in in General."}
               </SettingRowDescription>
             )}
             {personal && active && (
