@@ -90,7 +90,6 @@ import {
 import { TURN_SPACER } from "../../lib/app-shell-classes";
 import { MOBILE_CONTROL_GLASS } from "../../lib/app-header-classes";
 import {
-  NEXT_RISE,
   PILL_CENTRED,
   TRANSCRIPT_ICON_BUTTON,
   TRANSCRIPT_PILL_BUTTON,
@@ -596,9 +595,7 @@ export function SessionViewerMainRegion({
     setMobileActionMenuEl,
     openNewWorkspace,
   } = actionBand;
-  // Desktop puts the arrow left of the Next tab rather than in a band above.
-  const scrollBesideNext = scrollReady && nextAction && !isPhone;
-  const scrollAction = scrollReady && !scrollBesideNext;
+  const scrollAction = scrollReady;
   const {
     forkFrom,
     composerResetSeq,
@@ -706,7 +703,6 @@ export function SessionViewerMainRegion({
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]",
           actionClearance,
-          nextAction && NEXT_RISE,
         )}
       >
         {showPortal && portalTarget ? (
@@ -1293,8 +1289,7 @@ export function SessionViewerMainRegion({
                       </button>
                     </div>
                   )}
-                  {/* Reading and reply actions float above the composer. The
-                    unread destination belongs to the attached composer flaps. */}
+                  {/* Reading, reply and unread actions float above the composer. */}
                   {hasActionBand && (
                     <div className={VIEWER_SUGGESTIONS}>
                       <div
@@ -1344,10 +1339,20 @@ export function SessionViewerMainRegion({
                             </Tooltip>
                           </div>
                         )}
+                        {nextAction && !isPhone && (
+                          <div
+                            className={cn(
+                              "pointer-events-auto col-start-3 row-start-1 flex min-w-0 justify-end justify-self-end",
+                              quickReplies && SCROLL_ACTION_BESIDE_REPLIES,
+                            )}
+                          >
+                            <NextUnreadButton key={session.id} />
+                          </div>
+                        )}
                         {isPhone && (
                           <div
                             className={cn(
-                              "pointer-events-auto mx-auto hidden h-12 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-0.5 text-dim shadow-header-control phone:flex phone:[body.kb-open_&]:hidden",
+                              "pointer-events-auto mx-auto hidden h-12 min-w-0 max-w-full items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-0.5 text-dim shadow-header-control phone:flex phone:[body.kb-open_&]:hidden",
                               MOBILE_CONTROL_GLASS,
                             )}
                           >
@@ -1379,6 +1384,15 @@ export function SessionViewerMainRegion({
                               disabled={!openNewWorkspace}
                               onClick={openNewWorkspace}
                             />
+                            {nextAction && (
+                              <>
+                                <span
+                                  className="mx-0.5 h-5 w-px shrink-0 bg-divider"
+                                  aria-hidden
+                                />
+                                <NextUnreadButton key={session.id} phone />
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1601,39 +1615,6 @@ export function SessionViewerMainRegion({
                       ) : (
                         attachedComposer
                       )
-                    }
-                    attachedAction={
-                      nextAction ? (
-                        <>
-                          {scrollBesideNext && (
-                            // Centred on the composer, level with the tab's
-                            // visible 40px, as the floating arrow is.
-                            <div className="absolute top-1 left-1/2 -translate-x-1/2">
-                              <Tooltip
-                                label="Scroll to the bottom"
-                                shortcut={transcriptDownKeys ?? undefined}
-                              >
-                                <button
-                                  className={TRANSCRIPT_ICON_BUTTON}
-                                  type="button"
-                                  aria-label="Scroll to the bottom"
-                                  onClick={() => {
-                                    cancelIndexAnchorHold();
-                                    scrollToLatest("auto");
-                                  }}
-                                >
-                                  <IconArrowDown
-                                    size={20}
-                                    className="text-dim transition-transform group-hover:translate-y-px"
-                                    aria-hidden
-                                  />
-                                </button>
-                              </Tooltip>
-                            </div>
-                          )}
-                          <NextUnreadButton key={session.id} phone={isPhone} />
-                        </>
-                      ) : null
                     }
                     sendMenu={
                       session.source === "opensession"

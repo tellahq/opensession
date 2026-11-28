@@ -165,8 +165,6 @@ interface Props {
   actions: ComposerActions;
   /** Content visually attached to the composer above the draft field. */
   attached?: React.ReactNode;
-  /** A compact tab attached to the top-right edge, above any full-width flaps. */
-  attachedAction?: React.ReactNode;
   /** Extra row for the "+" menu, below the built-in ones. Same shape as
    * `sendMenu`: render a `composerMenuItem` button and call `close()` when it
    * is picked. */
@@ -266,7 +264,6 @@ export function Composer({
   },
   menuExtra,
   attached,
-  attachedAction,
   sendMenu,
 }: Props) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
@@ -529,7 +526,7 @@ export function Composer({
   const [focused, setFocused] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [dictating, setDictating] = useState(false);
-  const hasAttached = !!attached || !!attachedAction;
+  const hasAttached = !!attached;
   // What a send would carry. The attached rows above the field (a live call's
   // status, queued messages) hold the composer open but are not a draft.
   const hasDraft =
@@ -1513,13 +1510,6 @@ export function Composer({
     <div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]">
       {/* Queued/steered messages fold out from behind the composer box —
           a sibling flap tucked under its top edge, not a box-in-box. */}
-      {attachedAction && (
-        <div className="relative -mb-3.5 flex justify-end px-3">
-          {attachedAction}
-        </div>
-      )}
-      {/* Keep the compact action outside the full-width stack so the first
-          flap retains its top corners, even when the action is present. */}
       {/* Stacked flaps read as one panel: only the top one keeps its rounded-xs
           corners, and each later one meets it with a straight seam. */}
       {flaps && (

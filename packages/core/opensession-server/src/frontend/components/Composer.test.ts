@@ -26,7 +26,6 @@ test("composer groups configuration and actions behind a bounded prop API", asyn
     "config",
     "actions",
     "attached",
-    "attachedAction",
     "menuExtra",
     "sendMenu",
   ]);
@@ -34,12 +33,11 @@ test("composer groups configuration and actions behind a bounded prop API", asyn
   expect(types).toContain("export interface ComposerActions {");
 });
 
-test("full-width flaps have their own stack outside the compact action", async () => {
+test("full-width flaps stack as one panel", async () => {
   const component = await source("./Composer.tsx");
 
   // Every flap below another one squares its top, so a stack reads as one
-  // panel. A next-chat action must not count as that preceding sibling. The
-  // usage bar, when switched on, is the top flap of the same stack.
+  // panel. The usage bar, when switched on, is the top flap of the same stack.
   expect(component).toContain(
     '<div className="flex flex-col [&>*:not(:first-child)]:rounded-t-none">\n          {usageBar}\n          {attached}',
   );
