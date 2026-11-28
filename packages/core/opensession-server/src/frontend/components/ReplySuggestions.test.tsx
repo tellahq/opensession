@@ -12,7 +12,6 @@ import {
   VIEWER_ACTION_ROW_WITH_SCROLL,
   VIEWER_SUGGESTIONS,
   VIEWER_SUGGESTIONS_ROW,
-  VIEWER_SUGGESTIONS_ROW_INLINE,
 } from "../lib/session-viewer-classes";
 
 const { ReplySuggestions } = await import("./ReplySuggestions");
@@ -127,9 +126,6 @@ describe("ReplySuggestions", () => {
     expect(VIEWER_ACTION_ROW).toContain("phone:flex-col");
     expect(VIEWER_ACTION_ROW).toContain("phone:gap-2");
     expect(VIEWER_ACTION_ROW).toContain("phone:pr-0");
-
-    // Longer desktop choices still yield rather than push Next off the edge.
-    expect(VIEWER_SUGGESTIONS_ROW_INLINE).toContain("min-w-0");
   });
 
   test("renders nothing at all when there is nothing to suggest", () => {

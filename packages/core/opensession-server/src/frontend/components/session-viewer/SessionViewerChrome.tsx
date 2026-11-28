@@ -125,10 +125,6 @@ import {
   HEADER_SESSIONBAR_USAGE,
 } from "../../lib/app-header-classes";
 import {
-  SESSION_LINK,
-  SESSION_LINK_LINEAR,
-  SESSION_LINK_PLAIN,
-  VIEWER_MENU_SEP,
   VIEWER_OVERFLOW,
   VIEWER_PRESENCE,
   VIEWER_PRESENCE_AVATAR,
@@ -407,6 +403,7 @@ const styles = stylex.create({
   },
   /** A section rendered by its own component: the page's inset, 16px above. */
   infoSection: { marginTop: space.s16, paddingInline: space.s12 },
+  /** Header controls sit 6px apart. */
   keepGap: { marginInlineEnd: space.s6 },
   contents: { display: "contents" },
   diffUnderInfoBar: { "--diff-panel-top": geometry.infoBarClearance },
@@ -999,14 +996,19 @@ export function SessionViewerChrome({
                     <MenuLabel>{session.linearIssue.identifier}</MenuLabel>
                   </Menu.Item>
                 ) : (
-                  <a
-                    href={session.linearIssue.url}
-                    target="_blank"
-                    rel="noopener"
-                    className={cn(SESSION_LINK, SESSION_LINK_LINEAR)}
+                  <Button
+                    size="md"
+                    xstyle={styles.keepGap}
+                    render={
+                      <a
+                        href={session.linearIssue.url}
+                        target="_blank"
+                        rel="noopener"
+                      />
+                    }
                   >
                     {session.linearIssue.identifier}
-                  </a>
+                  </Button>
                 ))}
               {hasPlain &&
                 plainUrl &&
@@ -1019,14 +1021,15 @@ export function SessionViewerChrome({
                     <MenuLabel>Plain ↗</MenuLabel>
                   </Menu.Item>
                 ) : (
-                  <a
-                    href={plainUrl}
-                    target="_blank"
-                    rel="noopener"
-                    className={cn(SESSION_LINK, SESSION_LINK_PLAIN)}
+                  <Button
+                    size="md"
+                    xstyle={styles.keepGap}
+                    render={
+                      <a href={plainUrl} target="_blank" rel="noopener" />
+                    }
                   >
                     Plain ↗
-                  </a>
+                  </Button>
                 ))}
               {feedRef &&
                 (inMenu ? (
@@ -1038,14 +1041,15 @@ export function SessionViewerChrome({
                     <MenuLabel>{feedRefLabel} ↗</MenuLabel>
                   </Menu.Item>
                 ) : (
-                  <a
-                    href={feedRef.url}
-                    target="_blank"
-                    rel="noopener"
-                    className={cn(SESSION_LINK, SESSION_LINK_PLAIN)}
+                  <Button
+                    size="md"
+                    xstyle={styles.keepGap}
+                    render={
+                      <a href={feedRef.url} target="_blank" rel="noopener" />
+                    }
                   >
                     {feedRefLabel} ↗
-                  </a>
+                  </Button>
                 ))}
             </>
           );
@@ -1106,7 +1110,7 @@ export function SessionViewerChrome({
                   {/* Quick session actions use the same focus, spacing, collision,
 								    and dismissal behavior as every other app menu. Each group is
 								    conditional, so the rules between them collapse themselves
-								    rather than being predicted here (VIEWER_MENU_SEP). */}
+								    (ui/popup-styles separator) rather than being predicted here. */}
                   {placementActions}
                   {isPhone && keepInSidebarAction(true)}
                   {(compactHeader || isPhone) && shareAction(true)}
@@ -1114,7 +1118,7 @@ export function SessionViewerChrome({
                     workspaceId={session.workspaceId || null}
                     sessionId={session.id}
                   />
-                  <Menu.Separator className={VIEWER_MENU_SEP} />
+                  <Menu.Separator />
                   {newSessionAction}
                   {/* Fork always applies to the open session, even when the
                   rest of this menu is scoped to its workspace. */}
@@ -1131,14 +1135,14 @@ export function SessionViewerChrome({
                   {moveToSandboxAction}
                   {branchAction && (
                     <>
-                      <Menu.Separator className={VIEWER_MENU_SEP} />
+                      <Menu.Separator />
                       {branchAction}
                     </>
                   )}
-                  <Menu.Separator className={VIEWER_MENU_SEP} />
+                  <Menu.Separator />
                   {isPhone && secondaryActions(true)}
                   {archivedActions}
-                  <Menu.Separator className={VIEWER_MENU_SEP} />
+                  <Menu.Separator />
                   {workspaceScopedMenu ? (
                     // The workspace-scoped menu swaps in workspace lifecycle
                     // actions, but an archived session still needs its way back:

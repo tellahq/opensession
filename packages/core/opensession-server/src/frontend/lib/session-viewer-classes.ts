@@ -169,47 +169,9 @@ export const VIEWER_PRESENCE = "mx-1.5 flex items-center";
  */
 export const VIEWER_PRESENCE_AVATAR = "-ml-2 first:ml-0";
 
-/**
- * The Linear / Plain / feed links in the header: quiet outlined pills that
- * carry their source's hue. Each variant only re-tints the ink and the edge, so
- * it must come after the base string through `cn()` — two `text-*` utilities on
- * one element resolve by Tailwind's output order, not by the order written.
- *
- * The hues stay literal. They are the sources' brand colours (Linear's indigo,
- * Plain's teal), not steps of the app's palette, so there is no token to reach
- * for and swapping in one would be a redesign.
- */
-export const SESSION_LINK =
-  "session-link mr-1.5 rounded-control border border-line-strong px-[11px] py-[5px] " +
-  "text-label font-semibold text-dim no-underline " +
-  // Phones give it the same 44px touch target as the buttons beside it. These
-  // sit on the link rather than on the row, where the buttons' copy lives,
-  // because this is the element's own styling and nothing else wears the class
-  // in this row. Only the declarations that actually change are written: the
-  // 11px sides are already the resting value. A `phone:` variant beats the
-  // unprefixed `py-[5px]` and `text-label` on the same element because Tailwind
-  // emits every breakpoint variant after the unprefixed utilities.
-  "phone:inline-flex phone:min-h-11 phone:items-center phone:py-[7px] phone:text-label";
-export const SESSION_LINK_LINEAR =
-  "border-[rgba(94,106,210,0.5)] text-[#7b86e8]";
-export const SESSION_LINK_PLAIN =
-  "border-[rgba(13,148,136,0.5)] text-[#5eead4]";
-
 /** ⋯ overflow: the secondary actions collapse into the shared Menu popup when
  *  they would otherwise crowd the title. */
 export const VIEWER_OVERFLOW = "relative inline-flex";
-
-/**
- * A rule between two groups of the ⋯ menu. Most of that menu is conditional, so
- * a whole group can render nothing on a given session and a separator written
- * between groups lands doubled, or at the very top. Some rows decide their own
- * emptiness at runtime (Spin off needs an assistant turn, Preview needs its
- * status), so rather than predict it, each rule hides when it has no group
- * above it. `session-menu-sep` is the hook for that adjacent-sibling test and
- * carries nothing else.
- */
-export const VIEWER_MENU_SEP =
-  "session-menu-sep first:hidden [.session-menu-sep+&]:hidden";
 
 /* ── Panes ──────────────────────────────────────────────────────────────── */
 
@@ -482,18 +444,6 @@ export const ACTION_WITH_REPLIES_CLEARANCE =
  */
 export const VIEWER_SUGGESTIONS_ROW =
   "min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[17px]";
-
-/**
- * The same chips once Next shares the row with them.
- *
- * They keep the desktop shadow allowance and content-rail indent exactly as
- * above. On a phone they start on the composer's outer edge instead. That gives
- * the rail enough room to finish ordinary two-chip choices before Next, rather
- * than clipping the final capsule for an indent the narrow row cannot afford.
- * `min-w-0` still lets longer choices scroll sideways instead of pushing Next.
- */
-export const VIEWER_SUGGESTIONS_ROW_INLINE =
-  "min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[10px]";
 
 /* ── Floating transcript pills ──────────────────────────────────────────────
  *

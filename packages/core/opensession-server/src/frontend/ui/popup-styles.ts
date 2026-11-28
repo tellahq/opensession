@@ -172,7 +172,16 @@ export const popup = stylex.create({
   anchorWidth: { minWidth: geometry.anchorWidth },
   /** Inset to the rows' own edges, so it splits groups without cutting the
    *  popup in two. */
+  /** A rule between groups. Groups are often conditional, so a rule that
+   *  would lead, trail, or double up with the next one hides itself rather
+   *  than every menu predicting which groups render. */
   separator: {
+    display: {
+      default: null,
+      ":first-child": "none",
+      ":last-child": "none",
+      ":has(+ [role=separator])": "none",
+    },
     marginInline: space.s8,
     marginBlock: space.s6,
     height: geometry.hairline,

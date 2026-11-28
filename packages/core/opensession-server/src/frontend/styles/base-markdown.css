@@ -1150,10 +1150,8 @@ a.asset-ref:focus-visible {
    destination, not an alert, and the accent chip read as an error inside a
    sentence. The outlined, near-padless earlier form read as a stray border
    rather than an object you can click. Scoped on
-   the chip's data-session-id attribute: bare .session-link is ALSO the viewer
-   header's Linear/Plain pills (which carry their own literal ↗), and an
-   unscoped rule here clobbered them into mono accent chips with a second
-   arrow. */
+   the chip's data-session-id attribute, so nothing else wearing the class
+   is restyled. */
 .session-link[data-session-id],
 .automation-link[data-automation-id] {
   font-size: 0.95em;
