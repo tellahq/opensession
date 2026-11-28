@@ -218,13 +218,12 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("follow-ups report only what changed");
     expect(prompt).toContain("do not restate the problem they reported");
     expect(prompt).toContain("no pointers to proof");
-    expect(prompt).toContain("`✓ **Merge conflicts**: Resolved`");
+    expect(prompt).toContain("Never open a reply with a status line");
+    expect(prompt).toContain("never restate an earlier answer");
     expect(prompt).toContain(
       "verification limits and required decisions explicit",
     );
-    expect(prompt).toContain("◷ **Migration**: Running");
-    expect(prompt).toContain("✓ **Migration**: Done");
-    expect(prompt).toContain("never for blockers, questions or deliverables");
+    expect(prompt).not.toContain("◷ **Migration**: Running");
     expect(prompt).toContain("Leave passing verification out");
     expect(prompt).toContain(
       "add short `Cause:`, `Fix:` and `Checked:` paragraphs",

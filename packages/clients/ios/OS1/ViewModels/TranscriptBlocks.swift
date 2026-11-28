@@ -385,9 +385,6 @@ struct WorkTurn: Identifiable, Equatable {
     /// "Bash: bun test" — what the fold is doing right now, shown while it is
     /// live and collapsed so the work never looks stalled.
     var livePreview: String?
-    /// The status line the reply below opened with, named here instead:
-    /// "◷ Native build: Running · 35s ›" (`liftLeadStatuses`).
-    var leadStatus: ProgressUpdate?
 
     var hasFailure: Bool { failureCount > 0 }
     var hasNarration: Bool
@@ -826,23 +823,20 @@ enum TranscriptGrouping {
             live: live,
             progress: progress
         )
-        return thinkingMessages.visibleBlocks(liftLeadStatuses(project(progress, into: grouped)))
+        return thinkingMessages.visibleBlocks(dropLeadStatuses(project(progress, into: grouped)))
     }
 
-    /// A reply that opens with a status line hands it to the work row right
-    /// above it and keeps only its prose. Without a work row above it the
-    /// reply is left as written. The footer keeps the whole text, so Copy
-    /// copies the whole message. Mirrors the web's `liftLeadStatuses`.
-    private static func liftLeadStatuses(_ blocks: [TranscriptBlock]) -> [TranscriptBlock] {
+    /// A reply that opens with a status line ("✓ **Header icons**: Live", a
+    /// blank line, then prose) shows only its prose: the prose already says
+    /// the outcome, and the line above it only repeated it. The footer keeps
+    /// the whole text, so Copy copies the whole message. Mirrors the web's
+    /// `dropLeadStatuses`.
+    private static func dropLeadStatuses(_ blocks: [TranscriptBlock]) -> [TranscriptBlock] {
         var blocks = blocks
-        for index in blocks.indices.dropFirst() {
+        for index in blocks.indices {
             guard case .message(var entry) = blocks[index],
-                  case .work(var turn) = blocks[index - 1],
-                  turn.leadStatus == nil,
                   let lead = ProgressUpdate.lead(of: entry) else { continue }
-            turn.leadStatus = lead.update
             entry.content = lead.rest
-            blocks[index - 1] = .work(turn)
             blocks[index] = .message(entry)
         }
         return blocks

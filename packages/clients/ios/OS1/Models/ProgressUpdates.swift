@@ -11,8 +11,8 @@ struct ProgressUpdate: Equatable, Sendable {
 
     /// A reply that opens with a status line and goes on in prose ("◷
     /// **Native build**: Running", a blank line, then why): the status, and
-    /// the prose after it. The status then names the work row above the
-    /// reply. Mirrors the web's `splitLeadStatus`.
+    /// the prose after it. The reply then shows only its prose. Mirrors the
+    /// web's `splitLeadStatus`.
     static func lead(of entry: TranscriptEntry) -> (update: ProgressUpdate, rest: String)? {
         guard entry.isAssistant, entry.isReasoning != true, entry.isError != true else { return nil }
         let text = entry.text.drop { $0.isWhitespace }
