@@ -569,6 +569,12 @@ export async function handleSlackChannelRoutes(
     }
   }
 
+  const demoArtMatch = path.match(/^\/api\/slack\/demo-art\/([a-z]+\.svg)$/);
+  if (demoArtMatch && process.env.OPENSESSION_DEMO === "1")
+    return (
+      demoArt(demoArtMatch[1]!) ?? new Response("Not found", { status: 404 })
+    );
+
   // The demo instance keeps uploaded files in memory and serves them here.
   const demoFileMatch = path.match(/^\/api\/slack\/demo-files\/(FDEMO\d+)$/);
   if (demoFileMatch && process.env.OPENSESSION_DEMO === "1") {
@@ -878,8 +884,110 @@ function demoHistory(channelId: string): any[] {
     replyCount: 0,
     reactions: [{ name: "eyes", count: 1, emoji: "👀" }],
   });
+  // #launches carries what apps post: a pull request card, an issue laid
+  // out in blocks, and a link preview.
+  if (channelId === "CDEMO0004") history.push(...demoAppMessages(now));
   demoHistories.set(channelId, history);
   return history;
+}
+
+/** App and bot messages for the demo, already in the web's shape. */
+function demoAppMessages(now: number) {
+  const app = (userName: string) => ({
+    userName,
+    isBot: true,
+    replyCount: 0,
+    reactions: [],
+  });
+  return [
+    {
+      ...app("GitHub"),
+      ts: `${now - 3000}.000100`,
+      text: "",
+      attachments: [
+        {
+          color: "36a64f",
+          title: "#42 Fix avatar upload on Safari",
+          titleLink: "https://example.test/acme/web/pull/42",
+          text: "The file input's *accept* attribute dropped HEIC. This widens it and adds a test.",
+          fields: [
+            { title: "Reviewers", value: "Grace Hopper", short: true },
+            { title: "Checks", value: "12 passed", short: true },
+          ],
+          footer: "[acme/web](https://example.test/acme/web)",
+        },
+      ],
+    },
+    {
+      ...app("Linear"),
+      ts: `${now - 2400}.000100`,
+      text: "",
+      blocks: [
+        { type: "header", text: "Onboarding: second step skips avatar" },
+        {
+          type: "section",
+          text: "*ENG-118* moved to *In review* by Alan Turing",
+          fields: ["*Priority*\nHigh", "*Cycle*\nCycle 24"],
+        },
+        {
+          type: "context",
+          items: [
+            {
+              kind: "image",
+              image: { url: "/api/slack/demo-art/avatar.svg", alt: "" },
+            },
+            { kind: "text", text: "Alan Turing · Onboarding project" },
+          ],
+        },
+        {
+          type: "actions",
+          buttons: [
+            {
+              text: "Open issue",
+              url: "https://example.test/acme/issue/ENG-118",
+            },
+            { text: "Assign to me" },
+          ],
+        },
+      ],
+    },
+    {
+      ts: `${now - 1800}.000100`,
+      userName: "Ada Lovelace",
+      userId: "UDEMOADA",
+      isBot: false,
+      replyCount: 0,
+      reactions: [],
+      text: "Launch post draft: https://example.test/blog/onboarding-v2",
+      attachments: [
+        {
+          service: { name: "Acme blog" },
+          title: "Onboarding v2: a faster first five minutes",
+          titleLink: "https://example.test/blog/onboarding-v2",
+          text: "Three steps instead of six, an avatar upload that works everywhere, and a tour you can skip.",
+          image: {
+            url: "/api/slack/demo-art/cover.svg",
+            alt: "Onboarding v2",
+            width: 640,
+            height: 336,
+          },
+        },
+      ],
+    },
+  ];
+}
+
+/** Pictures for the demo's app messages, drawn here so it needs no network. */
+function demoArt(name: string): Response | undefined {
+  const svg =
+    name === "avatar.svg"
+      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#7b6cf6"/><text x="16" y="21" font-size="14" font-family="sans-serif" fill="#fff" text-anchor="middle">AT</text></svg>`
+      : name === "cover.svg"
+        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 336"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#5b8def"/><stop offset="1" stop-color="#a46ce8"/></linearGradient></defs><rect width="640" height="336" fill="url(#g)"/><text x="320" y="180" font-size="44" font-family="sans-serif" font-weight="700" fill="#fff" text-anchor="middle">Onboarding v2</text></svg>`
+        : undefined;
+  return svg
+    ? new Response(svg, { headers: { "Content-Type": "image/svg+xml" } })
+    : undefined;
 }
 
 async function demoChannelMessages(

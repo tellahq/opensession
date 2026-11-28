@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { RichAttachment, RichBlock } from "../../../shared/slack-rich";
 import { BASE_PATH } from "../base";
 import { BASE, request } from "./request";
 
@@ -70,6 +71,10 @@ export interface ChannelMessage {
   edited?: boolean;
   /** A thread reply also sent to the channel. */
   broadcast?: boolean;
+  /** An app's own layout, shown in place of the text. */
+  blocks?: RichBlock[];
+  /** App cards, link previews and shared messages under the text. */
+  attachments?: RichAttachment[];
   /** The reader wrote it, so they may edit or delete it. */
   mine?: boolean;
   /** For an own message: its Slack markup, to edit from. */

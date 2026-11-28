@@ -29,6 +29,7 @@ import {
 import { UserAvatar } from "../UserAvatar";
 import { ChannelComposer } from "./ChannelComposer";
 import { EmojiPicker } from "./EmojiPicker";
+import { RichAttachments, RichBlocks } from "./RichContent";
 import { SlackText } from "./SlackText";
 
 function Reactions({
@@ -286,7 +287,11 @@ export function ChannelMessageRow({
             )}
           </>
         )}
+        {!!message.blocks?.length && <RichBlocks blocks={message.blocks} />}
         {!!message.files?.length && <Files files={message.files} />}
+        {!!message.attachments?.length && (
+          <RichAttachments attachments={message.attachments} />
+        )}
         {!!message.reactions?.length && (
           <Reactions
             reactions={message.reactions}
