@@ -153,6 +153,33 @@ function filterGroups(groups: SectionGroup[], query: string): FilteredGroup[] {
  * Enter opens the first result and Escape clears, so a search can be run and
  * undone without leaving the keyboard.
  */
+/** One row of the desktop nav: a section, a repository, or Back to app. */
+function NavRow({
+  icon,
+  active,
+  onClick,
+  className = SETTINGS_NAV_ROW,
+  children,
+}: {
+  icon: React.ReactNode;
+  active?: boolean;
+  onClick: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={className}
+      data-active={active || undefined}
+      onClick={onClick}
+    >
+      <span className={SETTINGS_NAV_ICON}>{icon}</span>
+      {children}
+    </button>
+  );
+}
+
 function NavSearch({
   value,
   onChange,
@@ -423,30 +450,24 @@ export function Settings({
     <div className={SETTINGS_NAV_GROUP} key="Repositories">
       <div className={SETTINGS_NAV_CAPTION}>Repositories</div>
       {repoHits.map((entry) => (
-        <button
+        <NavRow
           key={entry.id}
-          className={SETTINGS_NAV_ROW}
-          data-active={(active === "repos" && repo === entry.id) || undefined}
+          icon={<RepoTile name={entry.id} size={18} />}
+          active={active === "repos" && repo === entry.id}
           onClick={() => onSelectRepo(entry.id)}
         >
-          <span className={SETTINGS_NAV_ICON}>
-            <RepoTile name={entry.id} size={18} />
-          </span>
           <span className="min-w-0 flex-1 truncate">
             {entry.label || entry.id}
           </span>
-        </button>
+        </NavRow>
       ))}
       {!q && (
-        <button
-          className={SETTINGS_NAV_ROW}
+        <NavRow
+          icon={<IconPlus size={20} />}
           onClick={() => setAddingRepo(true)}
         >
-          <span className={SETTINGS_NAV_ICON}>
-            <IconPlus size={20} />
-          </span>
           Add repository
-        </button>
+        </NavRow>
       )}
     </div>
   );
@@ -456,13 +477,12 @@ export function Settings({
     <div className={SETTINGS_NAV_GROUP} key={g.group ?? index}>
       {g.group && <div className={SETTINGS_NAV_CAPTION}>{g.group}</div>}
       {g.hits.map(({ item: s, hint }) => (
-        <button
+        <NavRow
           key={s.key}
-          className={SETTINGS_NAV_ROW}
-          data-active={(active === s.key && !repo) || undefined}
+          icon={s.icon}
+          active={active === s.key && !repo}
           onClick={() => onSelect(s.key)}
         >
-          <span className={SETTINGS_NAV_ICON}>{s.icon}</span>
           <span className="min-w-0 flex-1">
             {s.label}
             {hint && (
@@ -471,7 +491,7 @@ export function Settings({
               </span>
             )}
           </span>
-        </button>
+        </NavRow>
       ))}
     </div>
   );
@@ -491,12 +511,13 @@ export function Settings({
               neither they nor the account footer are lost once the list
               outgrows the nav. */}
           <aside className={SETTINGS_NAV}>
-            <button className={SETTINGS_BACK} onClick={onBack}>
-              <span className={SETTINGS_NAV_ICON}>
-                <IconChevronLeft />
-              </span>
+            <NavRow
+              className={SETTINGS_BACK}
+              icon={<IconChevronLeft />}
+              onClick={onBack}
+            >
               Back to app
-            </button>
+            </NavRow>
             <NavSearch
               ref={setSearchBar}
               value={query}

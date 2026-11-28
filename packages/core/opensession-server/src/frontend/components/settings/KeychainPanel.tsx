@@ -102,7 +102,7 @@ export function KeychainPanel() {
       >
         Add
       </Menu.Trigger>
-      <Menu.Popup align="end" sideOffset={4} className="min-w-[220px]">
+      <Menu.Popup align="end" sideOffset={4} className="min-w-56">
         <Menu.Item onClick={() => setAdding("login")}>
           <IconUser size={20} className="text-dim" />
           <span className="flex min-w-0 flex-1 flex-col">
@@ -373,7 +373,7 @@ export function KeychainPanel() {
       )}
 
       {data.credentials.length === 0 ? (
-        <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl px-6 py-14 text-center">
+        <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl px-6 py-12 text-center">
           <span className="flex size-12 items-center justify-center rounded-xl bg-raised text-dim">
             <IconKey size={24} />
           </span>

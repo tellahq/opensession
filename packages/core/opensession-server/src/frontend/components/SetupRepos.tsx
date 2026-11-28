@@ -92,7 +92,7 @@ export function AddRepositoryDialog({
   const input = useRef<HTMLInputElement>(null);
   return (
     <Modal.Root open={open} onOpenChange={onOpenChange}>
-      <Modal.Content widthClassName="max-w-[34rem]" initialFocus={input}>
+      <Modal.Content widthClassName="max-w-lg" initialFocus={input}>
         <Modal.Header
           title="Add repository"
           description="Clone one, register a checkout on the server, or start a new one."
