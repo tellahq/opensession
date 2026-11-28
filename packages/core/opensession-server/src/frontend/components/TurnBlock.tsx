@@ -416,9 +416,10 @@ export const TurnBlock = function TurnBlock({
         </div>
       )}
 
-      {/* Explicitly surfaced media survives the work fold. */}
+      {/* Explicitly surfaced media survives the work fold, flush with the
+          reply column like the text and renders around it. */}
       {(featured.images.length > 0 || featured.videos.length > 0) && (
-        <div className="pl-[7px] pr-1">
+        <div className="pr-1" data-featured-media="">
           <EntryImages images={featured.images} sessionId={sessionId} />
           <EntryVideos videos={featured.videos} />
         </div>
@@ -1020,7 +1021,7 @@ function SuggestedTasks({
   );
   if (open.length === 0) return null;
   return (
-    <div className="mt-1 space-y-2 pl-[7px] pr-1">
+    <div className="mt-1 space-y-2 pr-1">
       {open.map(({ id, task }) => (
         <SuggestedTaskCard
           key={id}

@@ -481,7 +481,7 @@ describe("TurnBlock featured media", () => {
         live: false,
       }),
     );
-    const strip = html.slice(html.lastIndexOf('class="pl-[7px] pr-1"'));
+    const strip = html.slice(html.lastIndexOf("data-featured-media"));
 
     expect(html).toContain('aria-expanded="false"');
     expect(strip).toContain(shot);
