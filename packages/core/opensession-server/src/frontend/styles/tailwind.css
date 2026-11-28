@@ -472,6 +472,19 @@
 	   expands to the WCAG-friendly 44px touch convention on coarse pointers. */
   --spacing-hit-target: 40px;
   --spacing-hit-target-touch: 44px;
+  /* A status dot set inline with a row's text (StyleX `geometry.dotInline`). */
+  --spacing-dot-inline: 7px;
+
+  /* Column measures, the same names StyleX reads as `geometry.page*`: a
+	   page's narrow reading column (a conversation, a PR), its default, its
+	   wide one (a feed, a PR list), the settings column, and a lone card set
+	   in a column (a notice, an expanded message's detail, the first-run
+	   card). `max-w-page`, not `max-w-[860px]`. */
+  --container-page-narrow: 760px;
+  --container-page: 860px;
+  --container-page-wide: 920px;
+  --container-settings: 720px;
+  --container-card: 560px;
 
   /* Motion. Without these the utility layer runs its own motion system: a
 	   bare `transition-colors` emits Tailwind's stock cubic-bezier(0.4, 0, 0.2, 1),

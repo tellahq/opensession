@@ -467,6 +467,8 @@ export const geometry = stylex.defineConsts({
   pageNarrow: "760px",
   pageDefault: "860px",
   pageWide: "920px",
+  /** A lone card set in a column (Tailwind `max-w-card`). */
+  card: "560px",
   /** A page's own padding, and the gaps under its header and filters. These
    *  sit off the spacing scale on purpose for now; folding them in is an
    *  open decision (docs/design-system.md). */

@@ -10,7 +10,7 @@
 
 /** The shared page column. The pull-request top bar uses the same width so its
  *  title and trailing controls align with the list below. */
-export const PR_PAGE_COLUMN = "mx-auto w-full max-w-[920px] px-6";
+export const PR_PAGE_COLUMN = "mx-auto w-full max-w-page-wide px-6";
 
 /** Labels and row contents share the page's content edge; the list itself runs
  *  12px past it so a hovered row's wash has room to breathe. */

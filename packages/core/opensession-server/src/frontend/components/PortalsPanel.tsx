@@ -247,7 +247,7 @@ export function PortalsPage({
                         >
                           <span
                             className={cn(
-                              "size-[7px] shrink-0 rounded-full",
+                              "size-dot-inline shrink-0 rounded-full",
                               service.running ? "bg-green" : "bg-line-strong",
                             )}
                             aria-hidden="true"

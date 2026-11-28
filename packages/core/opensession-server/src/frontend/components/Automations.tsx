@@ -305,7 +305,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
             : "flex-1 px-6 pt-7 pb-15 max-[560px]:px-4 max-[560px]:pt-5 max-[560px]:pb-12",
         )}
       >
-        <div className={cn("mx-auto", !sel && "max-w-[860px]")}>
+        <div className={cn("mx-auto", !sel && "max-w-page")}>
           <PageHeader
             className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${sel ? "mb-3.5 items-center" : ""}`}
           >

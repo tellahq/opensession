@@ -221,7 +221,7 @@ export function SupportInbox({
         >
           <span className={SIDEBAR_RAIL}>
             <span
-              className="size-[7px] rounded-full"
+              className="size-dot-inline rounded-full"
               style={{ backgroundColor: dot }}
             />
           </span>

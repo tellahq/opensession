@@ -879,7 +879,7 @@ export function IngressPanel({
                   ? "Configure domain"
                   : "Configure public callback"
               }
-              modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(760px,calc(100vw-32px))] max-w-[760px]"
+              modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(760px,calc(100vw-32px))] max-w-page-narrow"
               sheetClassName="h-[94dvh]"
             >
               {(dismiss) => (

@@ -359,7 +359,7 @@ export const tabDotClass = (waiting: boolean) =>
 
 /** A view tab's status dot (PR state). Shared with the right panel's tabs,
  *  which render the same mark. The caller adds the tone's fill. */
-export const PANEL_TAB_DOT = "size-[7px] rounded-full";
+export const PANEL_TAB_DOT = "size-dot-inline rounded-full";
 
 /**
  * What that dot means on a Review view-tab: the PR's state, plus the conflict

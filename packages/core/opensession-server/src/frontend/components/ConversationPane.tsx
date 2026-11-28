@@ -276,7 +276,7 @@ export function ConversationPane({
         <div className="h-full overflow-y-auto">
           <div
             className={cn(
-              "mx-auto w-full max-w-[760px] px-5 pb-5",
+              "mx-auto w-full max-w-page-narrow px-5 pb-5",
               // The rail floats, so the thread owes it the space it sits in:
               // 12px of offset plus a 32px pill, and 4px clear of it.
               rail
@@ -373,7 +373,7 @@ export function ConversationPane({
                   onClick={() => onOpenSession(session.id)}
                 >
                   <span
-                    className="size-[7px] shrink-0 rounded-full"
+                    className="size-dot-inline shrink-0 rounded-full"
                     style={{
                       backgroundColor:
                         sessionState?.dotColor || "var(--text-faint)",
@@ -419,7 +419,7 @@ export function ConversationPane({
 
       {/* Keep the customer reply available while the ticket scrolls. */}
       {thread && (
-        <div className="mx-auto w-full max-w-[760px] shrink-0 px-5 pb-5">
+        <div className="mx-auto w-full max-w-page-narrow shrink-0 px-5 pb-5">
           <PlainReplyBox
             key={threadId}
             threadId={threadId}

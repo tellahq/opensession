@@ -388,7 +388,7 @@ function NoticeRow({
         )}
       </span>
       {collapsible && open && (
-        <div className="mx-auto mt-2 w-full max-w-[560px] rounded-lg bg-panel px-4 py-3 text-left">
+        <div className="mx-auto mt-2 w-full max-w-card rounded-lg bg-panel px-4 py-3 text-left">
           <ClampedBody
             className={cn(msgBody, "markdown")}
             content={entry.content}

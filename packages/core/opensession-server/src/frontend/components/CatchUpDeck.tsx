@@ -289,7 +289,7 @@ export function CatchUpDeck({
       </PhoneTopBar>
 
       {!done && (modelLoadError || accountLoadError) && (
-        <div className="flex w-full max-w-[860px] flex-col gap-2 px-4">
+        <div className="flex w-full max-w-page flex-col gap-2 px-4">
           {modelLoadError && (
             <InlineAlert onDismiss={() => setModelLoadError(null)}>
               {modelLoadError}
@@ -306,7 +306,7 @@ export function CatchUpDeck({
       {done ? (
         <CaughtUp total={total} onExit={onExit} />
       ) : (
-        <div className="relative flex w-full max-w-[860px] flex-1 items-center justify-center px-4 pb-4">
+        <div className="relative flex w-full max-w-page flex-1 items-center justify-center px-4 pb-4">
           {/* Peek of the next card behind the top one, for depth. */}
           {next && (
             <div
@@ -356,7 +356,7 @@ export function CatchUpDeck({
 			    the card stack for the same reason the header is: a tilted card
 			    reaches past its own box at both ends. */}
       {!done && (
-        <div className="relative z-sticky flex w-full max-w-[860px] shrink-0 items-stretch gap-2.5 bg-surface px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+        <div className="relative z-sticky flex w-full max-w-page shrink-0 items-stretch gap-2.5 bg-surface px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
           <Button
             size="lg"
             className="flex-1 py-3 text-sm"
