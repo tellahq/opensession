@@ -73,7 +73,7 @@ const ICON_PENDING = "cursor-default text-dim";
    press washes, which makes the band darken under the pointer. */
 const SUMMARY_MARK =
   "grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring " +
-  "transition-[background-color,scale] duration-150 ease-out";
+  "transition-[background-color,scale] duration-micro ease-standard";
 /* The mark's 20px glyph sits inside a 28px target, so its visible edge already
    sits 4px inside the box. Push the box another 4px off the headline to land a
    14px gap between the globe and the words: at the row's bare 6px the glyph
@@ -85,7 +85,7 @@ const SUMMARY_MARK_PAIR = "mr-1";
    outside the thin globe circle so it reads as a halo, not a second outline.
    The bar variant's globe is only 15px, so its ring shrinks to hug it. */
 const RING_BASE =
-  "pointer-events-none absolute top-1/2 left-1/2 rounded-full border border-transparent border-t-current opacity-90 animate-[preview-spin_0.7s_linear_infinite]";
+  "pointer-events-none absolute top-1/2 left-1/2 rounded-full border border-transparent border-t-current opacity-90 animate-spin-quick";
 /* base.css freezes every animation under prefers-reduced-motion and then hands
    the progress spinners their duration back — this is one of them (a stopped
    spinner makes a live deploy look hung), so it restates it for itself now that
@@ -153,7 +153,7 @@ export function StagingLink({
     if (!deployPending) return null;
     const shimmerGlobe = (size: IconSize) => (
       <span
-        className="relative inline-flex items-center justify-center animate-[staging-shimmer_1.4s_ease-in-out_infinite]"
+        className="relative inline-flex items-center justify-center animate-shimmer"
         aria-hidden="true"
       >
         <IconGlobe size={size} />

@@ -80,7 +80,7 @@ export function ProgressStatusRow({
           <span
             aria-hidden="true"
             className={cn(
-              "grid size-5 flex-none place-items-center text-faint transition-transform duration-150 group-hover:text-dim motion-reduce:transition-none",
+              "grid size-5 flex-none place-items-center text-faint transition-transform duration-micro group-hover:text-dim motion-reduce:transition-none",
               open && "rotate-90",
             )}
           >

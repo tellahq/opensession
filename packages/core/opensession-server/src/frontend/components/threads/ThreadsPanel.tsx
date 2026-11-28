@@ -237,7 +237,7 @@ function ThreadGroups({
             <IconChevronRight
               size={20}
               className={cn(
-                "text-faint transition-transform duration-150",
+                "text-faint transition-transform duration-micro",
                 !folded.has(group.state) && "rotate-90",
               )}
             />

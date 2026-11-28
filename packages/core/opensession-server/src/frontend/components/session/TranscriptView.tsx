@@ -37,7 +37,7 @@ export function TranscriptView({
   return (
     <div
       className={cn(
-        "w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150",
+        "w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-micro",
         openSettlePending && "opacity-0",
       )}
     >

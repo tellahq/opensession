@@ -187,7 +187,7 @@ export function ContextRing({
         strokeLinecap="round"
         strokeDasharray={circ}
         strokeDashoffset={offset}
-        className={cn("transition-[stroke-dashoffset] duration-300", tone)}
+        className={cn("transition-[stroke-dashoffset] duration-long", tone)}
       />
     </svg>
   );

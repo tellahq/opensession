@@ -62,7 +62,7 @@ export const TOOL_ROW_CHIP =
   "inline-flex flex-shrink-0 self-center items-center gap-0.5 rounded-control " +
   "bg-hover py-[2px] pl-2 pr-1 text-meta font-medium leading-4 text-dim " +
   "transition-[color,background-color,scale] hover:bg-pressed hover:text-fg " +
-  "active:scale-[0.96] focus-ring";
+  "active:scale-press focus-ring";
 
 /**
  * Says a collapsed row is holding media the agent didn't ask to show — a Read

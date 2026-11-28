@@ -172,9 +172,7 @@ export function ReviewRail({
                 {checkSummary.failed > 0 ? (
                   <IconX size={20} />
                 ) : checkSummary.pending > 0 ? (
-                  <span className="pr-check-mark-pending animate-[pulse_1.4s_infinite]">
-                    ●
-                  </span>
+                  <span className="pr-check-mark-pending animate-live">●</span>
                 ) : (
                   <IconCheck size={20} />
                 )}

@@ -614,7 +614,7 @@ function RepoTileButton({
 				    so the fade never becomes a mode you have to escape first. */}
         <div
           className={cn(
-            "grid grid-cols-6 gap-2 transition-opacity duration-150",
+            "grid grid-cols-6 gap-2 transition-opacity duration-micro",
             autoActive && "opacity-40",
           )}
         >

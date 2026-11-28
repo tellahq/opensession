@@ -250,7 +250,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
             <span className="inline-flex size-5 overflow-hidden">
               <IconArrowDown
                 size={20}
-                className="motion-safe:[button:hover:not(:disabled)_&]:animate-[update-arrow-drop_0.6s]"
+                className="motion-safe:[button:hover:not(:disabled)_&]:animate-arrow-drop"
               />
             </span>
           }
@@ -279,7 +279,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
     return (
       <Tooltip label={hint} side="top" multiline>
         <button
-          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-full border-none bg-accent px-3 text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none"
+          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-full border-none bg-accent px-3 text-supporting font-semibold leading-none text-on-accent transition-[background] duration-micro ease-standard hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 animate-toast-in motion-reduce:animate-none"
           onClick={refresh}
           disabled={refreshing}
           role="status"
@@ -299,8 +299,8 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
         // exempts rounded-full from its generic squircle rule.
         className={
           "inline-flex h-7 shrink-0 items-center rounded-full [corner-shape:squircle] px-[13px] " +
-          "cursor-pointer border-none bg-accent text-label font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 " +
-          "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none " +
+          "cursor-pointer border-none bg-accent text-label font-semibold leading-none text-on-accent transition-[background] duration-micro ease-standard hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 " +
+          "animate-toast-in motion-reduce:animate-none " +
           // Phone: keep the visible pill compact while a pseudo-element grows
           // its tap target to the full 44px header row.
           "phone:[.app-brand_&]:relative phone:[.app-brand_&]:order-3 " +
@@ -355,7 +355,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
       <div className="flex shrink-0 items-center gap-1">
         <button
           className={
-            "inline-flex h-7 items-center rounded-full px-3 cursor-pointer border-none bg-accent text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75"
+            "inline-flex h-7 items-center rounded-full px-3 cursor-pointer border-none bg-accent text-supporting font-semibold leading-none text-on-accent transition-[background] duration-micro ease-standard hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75"
           }
           onClick={refresh}
           disabled={refreshing}

@@ -71,7 +71,7 @@ function TaskRow({
       <button
         type="button"
         className={cn(
-          "flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors active:scale-[0.96]",
+          "flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors active:scale-press",
           done
             ? "border-green bg-green text-panel"
             : "border-line-strong text-transparent hover:border-fg/50",

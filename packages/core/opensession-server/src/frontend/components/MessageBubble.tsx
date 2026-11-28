@@ -1400,7 +1400,8 @@ export function ReasoningStep({
       <span className="relative flex size-[22px] flex-shrink-0 self-center items-center justify-center text-faint">
         <span
           className={cn(
-            hasBody && "transition-opacity duration-150 group-hover:opacity-0",
+            hasBody &&
+              "transition-opacity duration-micro group-hover:opacity-0",
           )}
         >
           <IconLightbulb size={20} />
@@ -1409,7 +1410,7 @@ export function ReasoningStep({
           <IconChevronDown
             size={20}
             className={cn(
-              "absolute block text-dim opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100",
+              "absolute block text-dim opacity-0 transition-[opacity,transform] duration-micro group-hover:opacity-100",
               open && "rotate-180",
             )}
           />

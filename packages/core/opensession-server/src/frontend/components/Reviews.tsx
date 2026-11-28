@@ -93,7 +93,7 @@ const CHECKS_TONE: Record<ChecksTone, { dot: string; label: string }> = {
   pass: { dot: "bg-green", label: "text-green" },
   fail: { dot: "bg-red", label: "text-red" },
   pending: {
-    dot: "bg-yellow rv-check-dot-pending animate-[pulse_1.4s_ease-in-out_infinite]",
+    dot: "bg-yellow rv-check-dot-pending animate-live",
     label: "text-yellow",
   },
 };

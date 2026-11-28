@@ -70,7 +70,7 @@ const chip =
   "bg-[var(--composer-surface)] " +
   "[--smooth-ring-color:var(--composer-border)] smooth-shadow-ring-md " +
   "text-label font-medium text-dim transition-[color,scale] " +
-  "hover:text-fg focus-visible:text-fg active:scale-[0.96] " +
+  "hover:text-fg focus-visible:text-fg active:scale-press " +
   // The hover wash layers over the lid rather than replacing it, so it paints
   // on a pseudo-element, which inherits the pill's radius and corner shape.
   "before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +

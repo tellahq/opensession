@@ -259,7 +259,7 @@ function AssetMenu({
           "flex shrink-0 items-center justify-center border-0",
           bar
             ? cn(
-                "size-10 rounded-full bg-transparent transition-[transform,background-color,color] active:scale-[0.96] phone:size-11",
+                "size-10 rounded-full bg-transparent transition-[transform,background-color,color] active:scale-press phone:size-11",
                 phone
                   ? "text-white/55 hover:bg-white/10 hover:text-white/80 data-[popup-open]:bg-white/10 data-[popup-open]:text-white/80"
                   : "text-white/60 hover:bg-white/15 hover:text-white data-[popup-open]:bg-white/15 data-[popup-open]:text-white",
@@ -1061,7 +1061,7 @@ export function AssetOverlay({
         <button
           type="button"
           aria-label="Close"
-          className="absolute right-[calc(12px+env(safe-area-inset-right,0px))] top-[calc(12px+env(safe-area-inset-top,0px))] z-float grid size-11 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
+          className="absolute right-[calc(12px+env(safe-area-inset-right,0px))] top-[calc(12px+env(safe-area-inset-top,0px))] z-float grid size-11 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-press hover:bg-white/20"
           onClick={onClose}
         >
           <IconX size={24} />
@@ -1071,7 +1071,7 @@ export function AssetOverlay({
           <button
             type="button"
             aria-label="Close"
-            className="absolute right-0 top-0 z-float grid size-10 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
+            className="absolute right-0 top-0 z-float grid size-10 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-press hover:bg-white/20"
             onClick={onClose}
           >
             <IconX size={20} />

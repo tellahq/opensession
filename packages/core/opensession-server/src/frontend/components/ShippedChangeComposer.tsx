@@ -552,7 +552,7 @@ export function ShippedChangeComposer({
             type="button"
             aria-label="Add images"
             title="Add images"
-            className="focus-ring inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim transition-[background-color,color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] disabled:opacity-40 phone:size-10"
+            className="focus-ring inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim transition-[background-color,color,scale] hover:bg-hover hover:text-fg active:scale-press disabled:opacity-40 phone:size-10"
             disabled={
               status !== "idle" || uploading || screenshots.length >= 10
             }

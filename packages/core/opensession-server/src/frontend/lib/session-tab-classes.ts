@@ -412,9 +412,9 @@ const DOT_BASE = "size-1.5 shrink-0 rounded-full";
 
 export const tabDotClass = (waiting: boolean) =>
   waiting
-    ? `${DOT_BASE} bg-blue shadow-[0_0_6px_var(--blue)] animate-[pulse_1.2s_ease-in-out_infinite] ` +
+    ? `${DOT_BASE} bg-blue shadow-[0_0_6px_var(--blue)] animate-waiting ` +
       "motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!"
-    : `${DOT_BASE} bg-yellow animate-[pulse_1.4s_ease-in-out_infinite] ` +
+    : `${DOT_BASE} bg-yellow animate-live ` +
       "motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";
 
 /** A view tab's status dot (PR state). Shared with the right panel's tabs,
@@ -545,7 +545,7 @@ export const TAB_HISTORY =
    not as a chrome border, so `border-line` would be a visual change rather
    than a translation. */
 export const TAB_SWATCH =
-  "size-[22px] rounded-full border border-[rgba(255,255,255,0.15)] transition-transform hover:scale-[1.18]";
+  "size-[22px] rounded-full border border-[rgba(255,255,255,0.15)] transition-transform hover:scale-grow";
 
 /** The chip for the colour the tab currently wears: a ring in the page ink,
  *  gapped off the chip by the panel it sits on. */

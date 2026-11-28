@@ -327,7 +327,7 @@ export const TurnBlock = function TurnBlock({
         </Tooltip>
         <span
           className={cn(
-            "grid size-5 flex-shrink-0 self-center place-items-center leading-none transition-transform duration-150",
+            "grid size-5 flex-shrink-0 self-center place-items-center leading-none transition-transform duration-micro",
             expanded && "rotate-90",
           )}
         >
@@ -593,7 +593,7 @@ function ToolRunBlock({
         <span className="relative grid size-[22px] flex-shrink-0 place-items-center text-faint">
           <span
             className={cn(
-              "absolute inset-0 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0",
+              "absolute inset-0 transition-opacity duration-micro group-hover:opacity-0 group-focus-visible:opacity-0",
               expanded && "opacity-0",
             )}
           >
@@ -605,7 +605,7 @@ function ToolRunBlock({
           <IconChevronDown
             size={20}
             className={cn(
-              "absolute block transition-[opacity,transform] duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+              "absolute block transition-[opacity,transform] duration-micro group-hover:opacity-100 group-focus-visible:opacity-100",
               expanded ? "opacity-100" : "-rotate-90 opacity-0",
             )}
           />

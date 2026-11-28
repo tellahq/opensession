@@ -474,7 +474,7 @@ export function Prs({
           so the active filter remains visible. */}
       <div
         className={cn(
-          "relative h-8 shrink-0 transition-[width] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+          "relative h-8 shrink-0 transition-[width] duration-standard ease-standard motion-reduce:transition-none",
           searchExpanded ? "w-[200px] min-w-[90px] shrink-[100]" : "w-8",
         )}
       >
@@ -482,7 +482,7 @@ export function Prs({
           ref={searchInputRef}
           className={cn(
             "absolute inset-0 h-8 pl-8 [&::-webkit-search-cancel-button]:hidden",
-            "transition-opacity duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+            "transition-opacity duration-micro ease-standard motion-reduce:transition-none",
             searchExpanded ? "opacity-100" : "pointer-events-none opacity-0",
           )}
           type="search"

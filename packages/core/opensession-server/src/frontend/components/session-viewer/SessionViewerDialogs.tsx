@@ -65,7 +65,7 @@ export function SessionViewerDialogs({
                 this ring was a bare `border-radius: 50%` with no corner-shape.
                 It serialises as a clamped huge px value instead of 50%, which
                 on a square box is the same circle. */}
-            <div className="size-[30px] animate-[spin_0.8s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent" />
+            <div className="size-[30px] animate-spin-quick rounded-full border-2 border-line-strong border-t-accent" />
             <span className={SESSION_DELETE_LABEL}>{deletion.label}</span>
           </div>
         </div>

@@ -13,7 +13,7 @@ export const PIXEL_GRID = "grid grid-cols-3 gap-px [--glow-color:currentColor]";
  * their radius. */
 export const PIXEL =
   "size-[3px] rounded-xs bg-[color-mix(in_srgb,currentColor_35%,transparent)] " +
-  "transition-[background,box-shadow,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]";
+  "transition-[background,box-shadow,opacity] duration-micro ease-standard";
 
 /** The wave, as animation LONGHANDS rather than an `animate-[…]` shorthand.
  * The shorthand would reset `animation-delay`, and which of the two won would

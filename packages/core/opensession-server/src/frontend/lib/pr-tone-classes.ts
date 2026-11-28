@@ -201,8 +201,7 @@ export const PR_BAR_STACK = `flex min-w-0 flex-col ${PR_BAR_IN_CARD}`;
 
 /** First-load placeholder ("Checking status…") so the strip holds its place
  *  instead of popping in once /pr and /git-status resolve. */
-export const PR_BAR_CHECKING =
-  "text-label font-semibold text-dim animate-[pulse_1.6s_ease-in-out_infinite]";
+export const PR_BAR_CHECKING = "text-label font-semibold text-dim animate-live";
 
 /** The headline — the one derived line the strip is for. */
 export const PR_BAR_STATE =
@@ -326,7 +325,7 @@ export function prChipExternalClass(
 ): string {
   const geometry =
     // -ml-px collapses the shared seam to a single hairline.
-    "-ml-px inline-flex items-center justify-center rounded-e-control rounded-s-none border no-underline transition-[background-color,scale] active:scale-[0.96]";
+    "-ml-px inline-flex items-center justify-center rounded-e-control rounded-s-none border no-underline transition-[background-color,scale] active:scale-press";
   const colour =
     tone === "muted"
       ? // No ink of its own: the neutral half is an <a>, so its arrow takes

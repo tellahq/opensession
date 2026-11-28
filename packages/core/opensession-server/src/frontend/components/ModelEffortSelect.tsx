@@ -946,7 +946,7 @@ export function ModelEffortSelect({
             : fieldTrigger
               ? selectTriggerClasses("md", true)
               : heroTrigger
-                ? "inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+                ? "inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-press data-[popup-open]:bg-hover data-[popup-open]:text-fg"
                 : "border-transparent hover:border-transparent hover:bg-hover",
           className,
         )}

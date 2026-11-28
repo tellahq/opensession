@@ -269,7 +269,7 @@ function BuildGroupFlap({
             <IconChevronDown
               size={20}
               className={cn(
-                "flex-none text-faint transition-transform duration-[var(--dur)]",
+                "flex-none text-faint transition-transform duration-standard",
                 !open && "rotate-180",
               )}
             />

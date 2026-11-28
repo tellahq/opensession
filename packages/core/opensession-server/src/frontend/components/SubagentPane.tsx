@@ -40,8 +40,8 @@ interface Props {
  * and a name in that list stops matching the moment a migration renames the
  * element. */
 const LIVE_DOT =
-  "size-[7px] shrink-0 rounded-full bg-green animate-[pulse_1.6s_ease-in-out_infinite] " +
-  "motion-reduce:[animation-duration:1.6s]! motion-reduce:[animation-iteration-count:infinite]!";
+  "size-[7px] shrink-0 rounded-full bg-green animate-live " +
+  "motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";
 
 export function SubagentPane({
   sessionId,

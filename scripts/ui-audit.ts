@@ -477,6 +477,23 @@ const SIGNALS: Signal[] = [
     count: (source) => occurrences(source, /\btext-\[[0-9.]+px\]/g),
   },
   {
+    id: "off-scale-motion",
+    instead:
+      "the motion scale: duration-micro/standard/long, ease-standard, scale-press/press-plate/grow, a named animate-* (styles/tailwind.css)",
+    exempt: ["styles/"],
+    count: (source) => {
+      const code = stripComments(source);
+      return (
+        occurrences(
+          code,
+          /(?<![\w-])(?:duration|ease|animate|delay)-\[[^\]]+\]/g,
+        ) +
+        occurrences(code, /(?<![\w-])-?scale-\[[^\]]+\]/g) +
+        occurrences(code, /(?<![\w-])(?:duration|delay)-\d+(?![\w.])/g)
+      );
+    },
+  },
+  {
     id: "off-scale-z",
     instead:
       "a named stacking layer, z-<name> or layer.<name> (base-theme.css --layer-*), or a small integer (-z-1 to z-9) for order inside a component",

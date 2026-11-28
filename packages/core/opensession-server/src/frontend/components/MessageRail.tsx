@@ -425,7 +425,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
               aria-hidden
               className={cn(
                 "absolute left-0 block origin-left rounded-[999px] bg-fg",
-                "transition-[transform,opacity] duration-200 ease-[var(--ease)]",
+                "transition-[transform,opacity] duration-standard ease-standard",
                 "motion-reduce:transition-none",
               )}
               style={{

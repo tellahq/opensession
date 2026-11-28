@@ -111,7 +111,7 @@ export function OrganizationSwitcher({
       <Menu.Root onOpenChange={(open) => open && loadMenu()}>
         {variant === "minibar" ? (
           <Menu.Trigger
-            className="focus-ring relative flex size-10 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] motion-reduce:transform-none"
+            className="focus-ring relative flex size-10 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] hover:bg-hover active:scale-press motion-reduce:transform-none"
             aria-label={`Open organization menu, current: ${name}`}
           >
             <span className="relative inline-flex size-[30px] items-center justify-center">
@@ -127,7 +127,7 @@ export function OrganizationSwitcher({
           </Menu.Trigger>
         ) : variant === "topbar" ? (
           <Menu.Trigger
-            className="focus-ring relative flex size-11 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] active:scale-[0.96] active:bg-hover motion-reduce:transform-none"
+            className="focus-ring relative flex size-11 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] active:scale-press active:bg-hover motion-reduce:transform-none"
             aria-label={`Open organization menu, current: ${name}`}
           >
             <span className="relative inline-flex size-10 items-center justify-center">
@@ -143,7 +143,7 @@ export function OrganizationSwitcher({
           </Menu.Trigger>
         ) : (
           <Menu.Trigger
-            className={`group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-control bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`}
+            className={`group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-control bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-press phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`}
             aria-label={`Open organization menu, current: ${name}`}
           >
             <span className="relative inline-flex size-[22px] shrink-0 items-center justify-center">

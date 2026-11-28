@@ -62,7 +62,7 @@ function SetupStep({
     <button
       type="button"
       className={cn(
-        "focus-ring flex min-h-9 w-full items-center gap-1.5 rounded-control px-1.5 text-left text-label font-medium transition-[background-color,color,scale] duration-[var(--dur-micro)] hover:bg-hover active:scale-[0.96] phone:min-h-11",
+        "focus-ring flex min-h-9 w-full items-center gap-1.5 rounded-control px-1.5 text-left text-label font-medium transition-[background-color,color,scale] duration-micro hover:bg-hover active:scale-press phone:min-h-11",
         complete ? "text-dim" : "text-fg",
       )}
       onClick={() =>
@@ -202,7 +202,7 @@ export function SetupWidget({
           <button
             type="button"
             aria-label="Dismiss setup checklist"
-            className="focus-ring flex size-10 shrink-0 items-center justify-center rounded-control text-faint transition-[color,background-color,scale] duration-[var(--dur-micro)] hover:bg-hover hover:text-fg active:scale-[0.96] phone:size-11"
+            className="focus-ring flex size-10 shrink-0 items-center justify-center rounded-control text-faint transition-[color,background-color,scale] duration-micro hover:bg-hover hover:text-fg active:scale-press phone:size-11"
             onClick={() => {
               dismissSetupWidget();
               setDismissed(true);
@@ -218,7 +218,7 @@ export function SetupWidget({
           <button
             type="button"
             aria-expanded={completedOpen}
-            className="focus-ring flex min-h-10 w-full items-center gap-2 rounded-control px-2 text-left text-label font-medium text-dim transition-[background-color,color,scale] duration-[var(--dur-micro)] hover:bg-hover hover:text-fg active:scale-[0.96] phone:min-h-11"
+            className="focus-ring flex min-h-10 w-full items-center gap-2 rounded-control px-2 text-left text-label font-medium text-dim transition-[background-color,color,scale] duration-micro hover:bg-hover hover:text-fg active:scale-press phone:min-h-11"
             onClick={() => setCompletedOpen((open) => !open)}
           >
             <IconCheckCircleFilled
@@ -229,7 +229,7 @@ export function SetupWidget({
             <IconChevronDown
               size={20}
               className={cn(
-                "mr-0.5 shrink-0 transition-transform duration-[var(--dur-micro)]",
+                "mr-0.5 shrink-0 transition-transform duration-micro",
                 completedOpen && "rotate-180",
               )}
             />

@@ -20,9 +20,7 @@ export function CheckRow({ check }: { check: PrCheck }) {
       >
         <span
           className={`w-3.5 shrink-0 text-center text-label ${CHECK_TEXT[cls]} ${
-            cls === "check-pending"
-              ? "pr-check-mark-pending animate-[pulse_1.4s_infinite]"
-              : ""
+            cls === "check-pending" ? "pr-check-mark-pending animate-live" : ""
           }`}
         >
           {mark}

@@ -1380,7 +1380,7 @@ export function SandboxesPanel() {
                           <div className="mt-2 max-w-[24rem]">
                             <div className="h-1 overflow-hidden rounded-full bg-hover">
                               <div
-                                className="h-full rounded-full bg-accent transition-[width] duration-[var(--dur)]"
+                                className="h-full rounded-full bg-accent transition-[width] duration-standard"
                                 style={{ width: `${operation.progress || 2}%` }}
                               />
                             </div>

@@ -421,6 +421,30 @@
   --default-transition-timing-function: var(--ease);
   --ease-out: var(--ease);
   --ease-in-out: var(--ease);
+
+  /* The motion scale by name, the same tokens StyleX reads as
+	   `motion.micro/standard/long/ease/pressScale/pressPlateScale`: write
+	   `duration-micro ease-standard`, not `duration-150` or an arbitrary value. */
+  --transition-duration-micro: var(--dur-micro);
+  --transition-duration-standard: var(--dur);
+  --transition-duration-long: var(--dur-lg);
+  --transition-duration-meter: var(--dur-meter);
+  --ease-standard: var(--ease);
+  /* A control's press tick, a card's (a large surface moves further for the
+	   same scale, so it takes less), and a small mark's hover grow. */
+  --scale-press: 0.96;
+  --scale-press-plate: 0.98;
+  --scale-grow: 1.2;
+  /* Named animations. `live` breathes on anything running, `waiting` a beat
+	   quicker on anything that needs you; `spin-quick` is a small inline ring. */
+  --animate-live: pulse 1.4s ease-in-out infinite;
+  --animate-waiting: pulse 1.2s ease-in-out infinite;
+  --animate-agents: composer-agents-pulse 1.4s ease-in-out infinite;
+  --animate-spin-quick: spin 0.8s linear infinite;
+  --animate-shimmer: staging-shimmer 1.4s ease-in-out infinite;
+  --animate-toast-in: update-toast-in var(--dur-lg) var(--ease);
+  --animate-arrow-drop: update-arrow-drop 0.6s;
+  --animate-hovercard-in: hovercard-in var(--dur-micro) var(--ease);
 }
 
 /* Accent is intentionally a bright fill/ring. Text needs the readable ink

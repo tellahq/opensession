@@ -1455,7 +1455,7 @@ export function WorkspaceSummaryBody({
                     type="button"
                     className={cn(
                       WS_SUMMARY_ACTION,
-                      "focus-ring shrink-0 cursor-pointer rounded-control border-none bg-transparent px-1 transition-[color,scale] hover:text-accent active:scale-[0.96] disabled:cursor-default disabled:opacity-50",
+                      "focus-ring shrink-0 cursor-pointer rounded-control border-none bg-transparent px-1 transition-[color,scale] hover:text-accent active:scale-press disabled:cursor-default disabled:opacity-50",
                     )}
                     onClick={() => void rerunOsReview()}
                     disabled={reviewStarting}

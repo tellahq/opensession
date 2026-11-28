@@ -217,7 +217,7 @@ export function OrganizationProfileSection({
         ) : (
           initials
         )}
-        <span className="pointer-events-none absolute inset-0 grid place-items-center rounded-[inherit] bg-black/50 text-white opacity-0 transition-opacity duration-150 group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100">
+        <span className="pointer-events-none absolute inset-0 grid place-items-center rounded-[inherit] bg-black/50 text-white opacity-0 transition-opacity duration-micro group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100">
           <IconArrowUpToLine size={20} />
         </span>
       </button>

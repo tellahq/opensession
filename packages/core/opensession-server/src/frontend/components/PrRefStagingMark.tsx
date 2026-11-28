@@ -17,7 +17,7 @@ type PrStaging = NonNullable<PrDetails["staging"]>;
  *  makes a 28px target feel like it answered. */
 export const SUMMARY_MARK_HOVER =
   "hover:bg-[color-mix(in_srgb,currentColor_26%,transparent)] " +
-  "active:scale-[0.96] active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]";
+  "active:scale-press active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]";
 
 /** The preview deploy of one of a workspace's other PRs, read through the
  *  session's PR API for that PR's branch. Null when it has none. */

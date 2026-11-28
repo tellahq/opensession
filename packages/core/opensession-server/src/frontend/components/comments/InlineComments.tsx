@@ -694,7 +694,7 @@ function MarginCard({
       onPointerDown={onActivate}
       onWheel={onWheel}
       className={cn(
-        "pointer-events-auto absolute overflow-y-auto overscroll-contain rounded-xl bg-popup p-3 [--smooth-ring-color:var(--popup-ring)] motion-safe:transition-[top,box-shadow] motion-safe:duration-150",
+        "pointer-events-auto absolute overflow-y-auto overscroll-contain rounded-xl bg-popup p-3 [--smooth-ring-color:var(--popup-ring)] motion-safe:transition-[top,box-shadow] motion-safe:duration-micro",
         active ? "z-2 smooth-shadow-ring-md" : "smooth-shadow-ring-sm",
       )}
       style={{ top, left, width, maxHeight }}

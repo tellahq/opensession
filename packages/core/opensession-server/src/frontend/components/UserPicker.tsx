@@ -366,7 +366,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
               // The raised-control optics of Button's `default` variant, at
               // tile proportions: a hairline is allowed here because the tile
               // is a control, not a card (see src/frontend/AGENTS.md).
-              className="flex flex-col items-center gap-2 rounded-lg border border-line bg-button px-3 py-4 text-item-title font-medium text-fg smooth-shadow-xs transition-[border-color,scale] hover:border-line-strong active:scale-[0.98] focus-ring"
+              className="flex flex-col items-center gap-2 rounded-lg border border-line bg-button px-3 py-4 text-item-title font-medium text-fg smooth-shadow-xs transition-[border-color,scale] hover:border-line-strong active:scale-press-plate focus-ring"
               onClick={() => setStoredUser(name)}
             >
               <UserAvatar name={name} size={36} />

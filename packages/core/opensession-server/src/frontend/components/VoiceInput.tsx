@@ -67,7 +67,7 @@ const PILL_BUTTON =
    their height inline from the level meter. */
 const WAVE_BAR_IDLE = "h-[3px] w-[3px] shrink-0 rounded-full bg-white/70";
 const WAVE_BAR_LIVE =
-  "h-[3px] w-[3px] shrink-0 rounded-full bg-white transition-[height] duration-[90ms] ease-linear";
+  "h-[3px] w-[3px] shrink-0 rounded-full bg-white transition-[height] duration-meter ease-linear";
 
 /** The pill arrives through a short blur rather than sliding. */
 const PILL_MOTION = {

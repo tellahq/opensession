@@ -1044,7 +1044,7 @@ const AgentRow = function AgentRow({
       </button>
       <div
         className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out",
+          "grid transition-[grid-template-rows] duration-standard ease-standard",
           open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]",
         )}
       >

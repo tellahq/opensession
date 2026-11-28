@@ -3,6 +3,7 @@
   "raw-form-control": 88,
   "arbitrary-text-size": 22,
   "arbitrary-leading": 2,
+  "off-scale-motion": 12,
   "off-scale-z": 0,
   "off-scale-radius": 9,
   "patched-control-height": 30,

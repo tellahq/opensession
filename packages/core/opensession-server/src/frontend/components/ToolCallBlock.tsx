@@ -545,13 +545,13 @@ export const ToolCallBlock = function ToolCallBlock({
           )}
         >
           <span className="relative z-1 flex size-[22px] flex-shrink-0 self-center items-center justify-center text-faint">
-            <span className="transition-opacity duration-150 group-hover:opacity-0">
+            <span className="transition-opacity duration-micro group-hover:opacity-0">
               <ToolGlyph toolName={toolName} size={20} />
             </span>
             <IconChevronDown
               size={20}
               className={cn(
-                "absolute block text-dim opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100",
+                "absolute block text-dim opacity-0 transition-[opacity,transform] duration-micro group-hover:opacity-100",
                 expanded && "rotate-180",
               )}
             />

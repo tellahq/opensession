@@ -322,7 +322,7 @@ function FirstMileSummary({
         const className = cn(
           "flex aspect-square min-w-0 flex-col justify-between rounded-2xl bg-popup-glass p-5 text-left [backdrop-filter:var(--popup-blur)] smooth-shadow-sm desktop:size-[200px] phone:p-3.5",
           tile.step &&
-            "focus-ring cursor-pointer transition-[transform,filter] duration-150 hover:brightness-[0.98] active:scale-[0.96] motion-reduce:transform-none",
+            "focus-ring cursor-pointer transition-[transform,filter] duration-micro hover:brightness-[0.98] active:scale-press motion-reduce:transform-none",
         );
         const content = (
           <>
@@ -774,7 +774,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
             <span
               aria-hidden="true"
               className={cn(
-                "h-2 rounded-full transition-[width,background-color,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+                "h-2 rounded-full transition-[width,background-color,opacity] duration-standard ease-standard motion-reduce:transition-none",
                 stepIndex === index
                   ? "w-6 bg-fg"
                   : stepIndex < index
@@ -812,7 +812,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
               ? "bg-transparent [backdrop-filter:none]"
               : "bg-palette-glass [--smooth-ring-color:var(--dialog-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-lg",
             panelSize?.phase === "animating" &&
-              "transition-[width,height] duration-[var(--dur-lg)] ease-[var(--ease)] motion-reduce:transition-none",
+              "transition-[width,height] duration-long ease-standard motion-reduce:transition-none",
           )}
           style={
             panelSize
@@ -842,7 +842,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
               aria-hidden={!contentVisible}
               inert={!contentVisible}
               className={cn(
-                "flex min-h-0 flex-1 flex-col transition-opacity duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+                "flex min-h-0 flex-1 flex-col transition-opacity duration-micro ease-standard motion-reduce:transition-none",
                 !contentVisible && "opacity-0",
               )}
             >
