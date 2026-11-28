@@ -100,7 +100,6 @@ import {
   IconDelegate,
   IconGlobe,
   IconConnections,
-  IconDotsHorizontal,
   IconEye,
   IconPullRequest,
   IconReturn,
@@ -133,7 +132,7 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
-import { useShortcutKeys } from "../hooks/useShortcutBindings";
+import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
 import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
@@ -549,7 +548,7 @@ export function NewSession({
     [],
   );
   const sendKey = effectiveSendKey(storedSendKey);
-  const attachKeys = useShortcutKeys("composer-attach");
+  const attachChord = useShortcutLabel("composer-attach");
 
   // One choice: This machine or a Sandbox. Which provider backs "Sandbox" is
   // the workspace's decision (its default, else the one ready connection), so
@@ -1638,17 +1637,6 @@ export function NewSession({
           {/* Footer toolbar */}
           <div className={cn(FOOTER, edges.bottom && EDGE_DIVIDER)}>
             <div className={cn(FOOTER_LEFT, phoneDictating && "hidden")}>
-              <Tooltip label="Attach a file" shortcut={attachKeys ?? undefined}>
-                <button
-                  type="button"
-                  className={FOOTER_ICON_BTN}
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={busy}
-                  aria-label="Attach a file"
-                >
-                  <IconPaperclip size={20} />
-                </button>
-              </Tooltip>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1680,9 +1668,10 @@ export function NewSession({
                   </button>
                 </Tooltip>
               )}
-              {/* Rarely changed execution settings stay one level behind a single
-                overflow button. Their current values remain visible in the
-                submenu rows, while attachment stays one tap away. */}
+              {/* One "+" carries attachments and the rarely changed execution
+                settings, as the session composer's "+" does. Their current
+                values stay visible in the submenu rows; the attach chord
+                still works without opening it. */}
               <GoalModal
                 open={goalOpen}
                 initial={goal ?? ""}
@@ -1693,7 +1682,7 @@ export function NewSession({
                 }}
               />
               <Menu.Root>
-                <Tooltip label="More options">
+                <Tooltip label="Attach files and session options">
                   <Menu.Trigger
                     type="button"
                     className={cn(
@@ -1711,9 +1700,9 @@ export function NewSession({
                         paletteIconBtnOn,
                     )}
                     disabled={busy}
-                    aria-label="More options"
+                    aria-label="Attach files and session options"
                   >
-                    <IconDotsHorizontal size={20} />
+                    <IconPlus size={22} />
                   </Menu.Trigger>
                 </Tooltip>
                 <Menu.Popup
@@ -1721,6 +1710,19 @@ export function NewSession({
                   sideOffset={6}
                   className="min-w-[260px] max-w-[min(360px,calc(100vw-1rem))]"
                 >
+                  <Menu.Item
+                    className="gap-2"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <IconPaperclip className="shrink-0 text-dim" size={20} />
+                    <span className="min-w-0 flex-1 truncate">
+                      Attach files
+                    </span>
+                    {!isPhone && attachChord && (
+                      <Menu.Shortcut>{attachChord}</Menu.Shortcut>
+                    )}
+                  </Menu.Item>
+                  <Menu.Separator className="my-1" />
                   {!forceMode && (
                     <Menu.CheckboxItem
                       checked={permission === "ask"}
