@@ -205,11 +205,7 @@ export function RunnersPanel() {
         title="Runners"
         description="Trusted computers for work that needs their hardware."
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setConnectChoice("choices")}
-          >
+          <Button size="sm" onClick={() => setConnectChoice("choices")}>
             Add Runner
           </Button>
         }
@@ -346,7 +342,7 @@ export function RunnersPanel() {
           </Button>
         }
       >
-        Workspace inventory
+        Connected
       </SettingsGroupLabel>
       {loading ? (
         <SettingCardSkeleton rows={3} icon={40} label="Loading Runners" />

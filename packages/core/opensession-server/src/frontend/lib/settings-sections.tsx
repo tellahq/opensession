@@ -14,6 +14,7 @@ import {
   IconHome,
   IconGlobe,
   IconKeyboard,
+  IconPalette,
   IconPeople,
   IconRocket,
   IconServer,
@@ -39,6 +40,7 @@ export type ToolSectionKey = "automations" | "goals" | "security";
 export type SettingsSectionKey =
   | "myAccounts"
   | "preferences"
+  | "appearance"
   | "notifications"
   | "shortcuts"
   | "general"
@@ -63,137 +65,164 @@ export const TOOL_SECTIONS = new Set<SettingsSectionKey>([
   "security",
 ]);
 
+/** The tabs across the top of Settings: yours alone, what everyone in the
+ *  organization shares, and the machines it runs on. */
+export type SettingsScope = "personal" | "organization" | "server";
+
+export const SCOPES: { key: SettingsScope; label: string }[] = [
+  { key: "personal", label: "Personal" },
+  { key: "organization", label: "Organization" },
+  { key: "server", label: "Server" },
+];
+
+export function scopeLabel(scope: SettingsScope): string {
+  return SCOPES.find((entry) => entry.key === scope)?.label ?? "";
+}
+
 interface SettingsSection {
   key: SettingsSectionKey;
   label: string;
-  group: string;
+  scope: SettingsScope;
+  /** A caption inside the tab, for a tab with more than one run of rows. */
+  group?: string;
   icon: React.ReactElement<{ size?: number }>;
 }
 
-// Personal is yours alone. Organization is what every session shares.
-// Infrastructure is where sessions run. Automation is the work the instance
-// does on its own, and Activity is the record it leaves.
 export const SECTIONS: SettingsSection[] = [
   {
     key: "myAccounts",
     label: "Account",
-    group: "Personal",
+    scope: "personal",
     icon: <IconUser />,
   },
   {
     key: "preferences",
     label: "Preferences",
-    group: "Personal",
+    scope: "personal",
     icon: <IconSliders />,
+  },
+  {
+    key: "appearance",
+    label: "Appearance",
+    scope: "personal",
+    icon: <IconPalette />,
   },
   {
     key: "notifications",
     label: "Notifications",
-    group: "Personal",
+    scope: "personal",
     icon: <IconBell />,
   },
   {
     key: "shortcuts",
     label: "Shortcuts",
-    group: "Personal",
+    scope: "personal",
     icon: <IconKeyboard />,
   },
   {
     key: "general",
     label: "General",
-    group: "Organization",
+    scope: "organization",
     icon: <IconHome />,
   },
   {
     key: "members",
     label: "Members",
-    group: "Organization",
+    scope: "organization",
     icon: <IconPeople />,
   },
   {
     key: "repos",
     label: "Repositories",
-    group: "Organization",
+    scope: "organization",
     icon: <IconBranches />,
   },
   {
     key: "providers",
     label: "Models",
-    group: "Organization",
+    scope: "organization",
     icon: <IconProviders />,
   },
   {
     key: "connections",
     label: "Connections",
-    group: "Organization",
+    scope: "organization",
     icon: <IconConnections />,
   },
   {
     key: "library",
     label: "Library",
-    group: "Organization",
+    scope: "organization",
     icon: <IconBook />,
   },
   {
     key: "memory",
     label: "Memory",
-    group: "Organization",
+    scope: "organization",
     icon: <IconDatabase />,
+  },
+  {
+    key: "audit",
+    label: "Audit log",
+    scope: "organization",
+    icon: <IconFileText2 />,
   },
   {
     key: "sandboxes",
     label: "Sandboxes",
-    group: "Infrastructure",
+    scope: "server",
     icon: <IconBox />,
   },
   {
     key: "runners",
     label: "Runners",
-    group: "Infrastructure",
+    scope: "server",
     icon: <IconServer />,
   },
   {
     key: "ingress",
     label: "Domains",
-    group: "Infrastructure",
+    scope: "server",
     icon: <IconGlobe />,
   },
   {
     key: "storage",
     label: "Storage",
-    group: "Infrastructure",
+    scope: "server",
     icon: <IconArchive />,
   },
   {
     key: "deploys",
     label: "Deploys",
-    group: "Infrastructure",
+    scope: "server",
     icon: <IconRocket />,
   },
   {
     key: "automations",
     label: "Automations",
+    scope: "organization",
     group: "Automation",
     icon: <IconClock />,
   },
-  { key: "goals", label: "Goals", group: "Automation", icon: <IconTarget /> },
+  {
+    key: "goals",
+    label: "Goals",
+    scope: "organization",
+    group: "Automation",
+    icon: <IconTarget />,
+  },
   {
     key: "security",
     label: "Security",
+    scope: "organization",
     group: "Automation",
     icon: <IconShieldCheck />,
   },
   {
     key: "papercuts",
     label: "Papercuts",
-    group: "Activity",
+    scope: "server",
     icon: <IconBandAid />,
-  },
-  {
-    key: "audit",
-    label: "Audit log",
-    group: "Activity",
-    icon: <IconFileText2 />,
   },
 ];
 
@@ -227,7 +256,7 @@ export function settingsPaletteActions(): SettingsPaletteAction[] {
       // sections share a name with a tool view or a top-level action).
       id: `settings-${section.key}`,
       label: section.label,
-      description: `Settings · ${section.group}`,
+      description: `Settings · ${scopeLabel(section.scope)}`,
       category: "Navigate" as const,
       keywords: SETTINGS_KEYWORDS[section.key] ?? [],
       icon: React.cloneElement(section.icon, { size: PALETTE_ICON_SIZE }),

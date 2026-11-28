@@ -104,7 +104,10 @@ function IntegrationCard({
             <div className="text-item-title font-semibold text-fg">
               {integration.label}
             </div>
-            <StateChip tone={state.tone} label={stateLabel} />
+            {/* An app that is off says so with its Set up button. */}
+            {state.tone !== "off" && (
+              <StateChip tone={state.tone} label={stateLabel} />
+            )}
           </div>
           <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
             {INTEGRATION_DESCRIPTIONS.get(integration.id) ??

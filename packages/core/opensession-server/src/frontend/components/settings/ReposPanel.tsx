@@ -104,8 +104,7 @@ function SharedCheckoutSetting() {
                 Local checkout
               </span>
               <span className="mt-1 block text-supporting text-dim">
-                Edit shared checkouts directly. Changes appear there right away,
-                and sessions share the same files.
+                Sessions share one checkout and edit it directly.
               </span>
             </span>
           </label>
@@ -116,8 +115,7 @@ function SharedCheckoutSetting() {
                 Separate pull request branch
               </span>
               <span className="mt-1 block text-supporting text-dim">
-                Give each session an isolated Git worktree and branch. Changes
-                stay separate from the local checkout, ready for a pull request.
+                Each session gets its own worktree and branch.
               </span>
             </span>
           </label>

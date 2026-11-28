@@ -90,8 +90,8 @@ export function KeychainSection() {
   );
   const hint = (
     <SettingsHint>
-      Sessions borrow credentials with your approval and never see the secret.
-      Logins are typed in by the agent, so add only test accounts.
+      Sessions use these with your approval and never see the secret. Add only
+      test logins.
     </SettingsHint>
   );
 

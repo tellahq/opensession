@@ -47,12 +47,6 @@ export const SETTINGS_KEYWORDS = {
     "desktop app",
   ],
   preferences: [
-    "theme",
-    "accent",
-    "dark mode",
-    "light mode",
-    "color-blind",
-    "new layout",
     "default model",
     "default repository",
     "code workspace",
@@ -69,12 +63,6 @@ export const SETTINGS_KEYWORDS = {
     "predicted reply",
     "autocomplete",
     "next button",
-    "steps",
-    "thinking",
-    "tool calls",
-    "live typing",
-    "you should know",
-    "pin",
     "links",
     "browser tab",
     "in-app browser",
@@ -90,6 +78,24 @@ export const SETTINGS_KEYWORDS = {
     "debug",
     "session context",
     "server health",
+  ],
+  appearance: [
+    "theme",
+    "accent",
+    "dark mode",
+    "light mode",
+    "color-blind",
+    "new layout",
+    "steps",
+    "thinking",
+    "tool calls",
+    "live typing",
+    "you should know",
+    "pin",
+    "transcript",
+    "sidebar",
+    "layout",
+    "colors",
   ],
   notifications: [
     "push",
@@ -221,7 +227,7 @@ const SETTINGS_KEYWORD_LOOKUP = new Map<string, string[]>(
   Object.entries(SETTINGS_KEYWORDS),
 );
 
-export type SectionLike = { key: string; label: string; group: string };
+export type SectionLike = { key: string; label: string; group?: string };
 
 export type SectionHit<T extends SectionLike> = {
   item: T;
@@ -244,7 +250,7 @@ export function matchSections<T extends SectionLike>(
   for (const item of items) {
     if (
       item.label.toLowerCase().includes(q) ||
-      item.group.toLowerCase().includes(q)
+      item.group?.toLowerCase().includes(q)
     ) {
       hits.push({ item });
       continue;

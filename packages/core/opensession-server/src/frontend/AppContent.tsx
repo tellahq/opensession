@@ -57,6 +57,7 @@ import { useAppDocumentInteractions } from "./hooks/useAppDocumentInteractions";
 import { useAppGlobalHotkeys } from "./hooks/useAppGlobalHotkeys";
 import { useAppRegistries } from "./hooks/useAppRegistries";
 import { useAppRoute } from "./hooks/useAppRoute";
+import { useRouteBeneathSettings } from "./hooks/useRouteBeneathSettings";
 import { useAppShell } from "./hooks/useAppShell";
 import { useAppViewState } from "./hooks/useAppViewState";
 import { useGithubConnectionState } from "./hooks/useGithubConnectionState";
@@ -171,7 +172,7 @@ export function AppContent({
   // hydration happens later, and every Back entry point reads its latest value.
   const currentSessionRef = useRef<UnifiedSession | null>(null);
   const {
-    route,
+    route: urlRoute,
     getCurrentRoute,
     navigate,
     goBack: goBackRoute,
@@ -187,6 +188,9 @@ export function AppContent({
     forgetConversation,
     canonicalizePath,
   } = useAppRoute({ serviceWorker, currentUser: getCurrentUser });
+  // On desktop Settings opens as a modal over the page it came from, so the
+  // rest of the app keeps rendering that page.
+  const { route, settingsModal } = useRouteBeneathSettings(urlRoute);
   const goBack = () =>
     goBackRoute(currentSessionRef.current?.parentSessionId ?? undefined);
   const currentUser = useCurrentUser();
@@ -1261,7 +1265,9 @@ export function AppContent({
       <RestartOverlay connected={connected} addHandler={addHandler} />
       <MediaLightboxHost />
       <BlockExpandHost />
-      <ToastHost container={settingsActive ? null : detailPaneEl} />
+      <ToastHost
+        container={settingsActive || settingsModal ? null : detailPaneEl}
+      />
       <RunningCloseDialog {...runningCloseDialog} />
       <div className="app">
         {!forceFirstMile && onboarding.state === "loading" ? (
@@ -1303,21 +1309,21 @@ export function AppContent({
               />
             )}
 
-            {settingsActive && (
+            {(settingsActive || settingsModal) && (
               <Settings
                 onBack={leaveSettings}
-                section={settingsSectionOf(route)}
+                section={settingsSectionOf(urlRoute)}
                 onShowRoot={() => navigate({ view: "settings" })}
                 onSelect={(key) => navigate(settingsRoute(key))}
               >
-                <ToolPage route={route} navigate={navigate} />
+                <ToolPage route={urlRoute} navigate={navigate} />
               </Settings>
             )}
-            {/* On phones the app-body stays mounted beneath the Settings sheet
-				    (the sheet floats over the root list); on desktop Settings is a
-				    full page and replaces it. */}
+            {/* The app body stays mounted beneath Settings: under the sheet on
+				    phones, and under the modal on desktop, where it is inert. */}
             {(!settingsActive || isPhone) && (
               <div
+                inert={settingsModal || undefined}
                 className={cn(
                   APP_BODY,
                   /* `mobile-detail` / `mobile-root` and `sidebar-collapsed` stay as

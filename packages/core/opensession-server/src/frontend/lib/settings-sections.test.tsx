@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   SECTIONS,
   TOOL_SECTIONS,
+  scopeLabel,
   settingsPaletteActions,
 } from "./settings-sections";
 import { SETTINGS_KEYWORDS } from "./settings-search";
@@ -14,13 +15,12 @@ import { SETTINGS_KEYWORDS } from "./settings-search";
 const navSections = SECTIONS.filter((s) => !TOOL_SECTIONS.has(s.key));
 
 describe("settingsPaletteActions", () => {
-  test("groups settings by personal and organization ownership", () => {
-    expect(
-      SECTIONS.find((section) => section.key === "myAccounts")?.group,
-    ).toBe("Personal");
-    expect(SECTIONS.find((section) => section.key === "general")?.group).toBe(
-      "Organization",
-    );
+  test("splits settings into personal, organization and server tabs", () => {
+    const scope = (key: string) =>
+      SECTIONS.find((section) => section.key === key)?.scope;
+    expect(scope("myAccounts")).toBe("personal");
+    expect(scope("general")).toBe("organization");
+    expect(scope("sandboxes")).toBe("server");
     expect(SECTIONS.find((section) => section.key === "memory")?.label).toBe(
       "Memory",
     );
@@ -71,13 +71,15 @@ describe("settingsPaletteActions", () => {
     for (const id of ids) expect(id.startsWith("settings-")).toBe(true);
   });
 
-  test("carries the section's label, group and keywords", () => {
+  test("carries the section's label, tab and keywords", () => {
     const actions = settingsPaletteActions();
     for (const action of actions) {
       const section = navSections.find((s) => s.key === action.section);
       expect(section).toBeTruthy();
       expect(action.label).toBe(section!.label);
-      expect(action.description).toBe(`Settings · ${section!.group}`);
+      expect(action.description).toBe(
+        `Settings · ${scopeLabel(section!.scope)}`,
+      );
       expect(action.keywords).toEqual(SETTINGS_KEYWORDS[action.section] ?? []);
       // House style: a middle dot, never an em dash.
       expect(action.description).not.toContain("—");

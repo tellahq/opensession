@@ -792,14 +792,16 @@ function ConnectionCard({
                 <div className="text-item-title font-semibold text-fg">
                   {provider.label}
                 </div>
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-meta font-medium",
-                    statusClasses(checking ? "checking" : connection.state),
-                  )}
-                >
-                  {checking ? "Checking" : STATE_LABEL[connection.state]}
-                </span>
+                {(checking || connection.state !== "not_configured") && (
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-meta font-medium",
+                      statusClasses(checking ? "checking" : connection.state),
+                    )}
+                  >
+                    {checking ? "Checking" : STATE_LABEL[connection.state]}
+                  </span>
+                )}
               </div>
               <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
                 {provider.description}
@@ -833,7 +835,6 @@ function ConnectionCard({
             {connection.state === "not_configured" ? (
               <Button
                 size="sm"
-                variant="primary"
                 onClick={() => setDialogOpen(true)}
                 disabled={checking}
               >
@@ -1072,15 +1073,14 @@ function ProjectEnvironmentDialog({
         </Field>
         <div className="rounded-lg bg-surface p-3 text-supporting leading-relaxed text-dim">
           {provider === "daytona" &&
-            "Daytona supports custom resource combinations, but these documented sizes avoid invalid or undersized setups."}
+            "Only documented sizes, to avoid invalid setups."}
           {provider === "box" &&
-            "Boat exposes three fixed machine types. Stop and resume retain the disk, and new sandboxes restore from this project's named snapshot."}
+            "Three fixed machine types. The disk survives stop and resume."}
           {provider === "tart" &&
-            "The VM shape applies when a VM boots. Memory is shared with the Mac itself, so keep the total of running VMs below what the host can spare."}
+            "Applies when a VM boots. VMs share the Mac's memory."}
           {provider === "usecomputer" &&
-            "Every sandbox is one of the two VMs on a reserved Mac (5 CPU, 8 GB). The reservation's layout sets the size, not the project."}
-          {provider === "modal" &&
-            "A session picks its GPU under Machine (T4 or L4). A GPU session gets at least 8 CPU and 32 GB, whatever the size here."}
+            "Each sandbox is one of two VMs on a reserved Mac (5 CPU, 8 GB)."}
+          {provider === "modal" && "GPU sessions get at least 8 CPU and 32 GB."}
         </div>
 
         <Modal.Footer>
@@ -1234,7 +1234,7 @@ export function SandboxesPanel() {
       <WorkspaceSandboxDefaults />
       {connectionsError && <InlineAlert>{connectionsError}</InlineAlert>}
       {environmentsError && <InlineAlert>{environmentsError}</InlineAlert>}
-      <SettingsGroupLabel>Connections</SettingsGroupLabel>
+      <SettingsGroupLabel>Providers</SettingsGroupLabel>
       <div className="grid gap-3">
         {loading && (
           <SettingCardSkeleton

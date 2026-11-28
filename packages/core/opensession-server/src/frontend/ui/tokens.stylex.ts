@@ -554,6 +554,8 @@ export const geometry = stylex.defineConsts({
   /** The settings page: its nav column, the air above its content, the
    *  catalog column the Library takes, and the bottom air under a panel. */
   settingsNavWidth: "232px",
+  settingsModalMaxWidth: "1440px",
+  settingsHeaderHeight: "52px",
   settingsContentTop: "44px",
   settingsColumnWide: "980px",
   settingsPanelBottom: "88px",
