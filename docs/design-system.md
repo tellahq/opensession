@@ -169,6 +169,9 @@ property, like the side panel plate) keep working unchanged.
      at section size and up, -0.01em below. Code is 0.9em at 1.55.
    - `Modal.Description` carries the standard description style (13px,
      regular, relaxed, dim) by default; call sites pass no classes.
+   - A menu row's words are `<MenuLabel>` and a submenu row ends in
+     `<MenuSubmenuArrow />` (`ui/menu`): one line, truncating.
+     `hand-rolled-menu-label` counts the bare `grow` spans left.
 
 ### Open decisions
 

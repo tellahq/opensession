@@ -22,7 +22,7 @@ import { useSessionSocket } from "../hooks/useSessionSocket";
 import type { FolderGrant } from "../lib/local-folders/provider";
 import { composerMenuIcon, composerMenuItem } from "../lib/composer-classes";
 import { Button } from "../ui/button";
-import { Menu, MENU_ICON } from "../ui/menu";
+import { Menu, MENU_ICON, MenuLabel } from "../ui/menu";
 import { ComposerPressButton } from "./composer/ComposerControls";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
@@ -202,7 +202,7 @@ function LocalFoldersFlap({ sessionId, folders, grants, waiting }: FlapProps) {
                         )
                       }
                     >
-                      <span className="grow">Allow edits</span>
+                      <MenuLabel>Allow edits</MenuLabel>
                       <Menu.Check on={!grant.readOnly} />
                     </Menu.CheckboxItem>
                   )}
@@ -253,7 +253,7 @@ export function ConnectFolderMenuItem({
       <span className={composerMenuIcon}>
         <IconFolderPlus size={22} />
       </span>
-      <span className="grow whitespace-nowrap">Connect a folder…</span>
+      <MenuLabel>Connect a folder…</MenuLabel>
     </ComposerPressButton>
   );
 }

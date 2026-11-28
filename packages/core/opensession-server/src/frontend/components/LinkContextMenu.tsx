@@ -1,5 +1,5 @@
 import { type MouseEvent, useState } from "react";
-import { Menu, MENU_ICON } from "../ui/menu";
+import { Menu, MENU_ICON, MenuLabel } from "../ui/menu";
 import { useCopy } from "../ui/copy";
 import { linksInBrowserTab } from "../lib/links-in-browser-tab";
 import { IconArrowUpRight, IconCheck, IconCopy, IconGlobe } from "./icons";
@@ -75,7 +75,7 @@ export function useLinkContextMenu(openBrowser: (url: string) => void) {
           <>
             <Menu.Item onClick={() => openBrowser(menu.url)}>
               <IconGlobe size={20} className={MENU_ICON} />
-              <span className="grow">Open in Browser tab</span>
+              <MenuLabel>Open in Browser tab</MenuLabel>
             </Menu.Item>
             <Menu.Item
               render={
@@ -88,7 +88,7 @@ export function useLinkContextMenu(openBrowser: (url: string) => void) {
               }
             >
               <IconArrowUpRight size={20} className={MENU_ICON} />
-              <span className="grow">Open in new tab</span>
+              <MenuLabel>Open in new tab</MenuLabel>
             </Menu.Item>
             <Menu.Item closeOnClick={false} onClick={() => copy(menu.url)}>
               {copied ? (
@@ -96,7 +96,7 @@ export function useLinkContextMenu(openBrowser: (url: string) => void) {
               ) : (
                 <IconCopy size={20} className={MENU_ICON} />
               )}
-              <span className="grow">{copied ? "Copied" : "Copy link"}</span>
+              <MenuLabel>{copied ? "Copied" : "Copy link"}</MenuLabel>
             </Menu.Item>
           </>
         ) : null}

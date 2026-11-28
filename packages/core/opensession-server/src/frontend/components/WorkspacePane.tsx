@@ -54,7 +54,7 @@ import {
 } from "./icons";
 import { Button } from "../ui/button";
 import { useConfirm } from "../ui/confirm";
-import { Menu, MENU_ICON } from "../ui/menu";
+import { Menu, MENU_ICON, MenuLabel, MenuSubmenuArrow } from "../ui/menu";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
@@ -716,7 +716,7 @@ export function WorkspacePane({
           {onRenameWorkspace && (
             <Menu.Item onClick={() => setRenameDraft(workspace.name)}>
               <IconPencil size={20} className={MENU_ICON} />
-              <span className="grow">Rename workspace</span>
+              <MenuLabel>Rename workspace</MenuLabel>
             </Menu.Item>
           )}
           <Menu.Item onClick={() => workspaceCopy.copy(window.location.href)}>
@@ -726,16 +726,16 @@ export function WorkspacePane({
               size={20}
               className={MENU_ICON}
             />
-            <span className="grow">
+            <MenuLabel>
               {workspaceCopy.copied ? "Copied" : "Share workspace"}
-            </span>
+            </MenuLabel>
           </Menu.Item>
           {isPhone && onNewSession && (
             <>
               <Menu.Separator />
               <Menu.Item onClick={() => onNewSession()}>
                 <IconPlus size={20} className={MENU_ICON} />
-                <span className="grow">New session in workspace</span>
+                <MenuLabel>New session in workspace</MenuLabel>
               </Menu.Item>
             </>
           )}
@@ -743,8 +743,8 @@ export function WorkspacePane({
             <Menu.SubmenuRoot>
               <Menu.SubmenuTrigger title="Closed sessions in this workspace">
                 <IconHistory size={20} className={MENU_ICON} />
-                <span className="grow">Archived sessions</span>
-                <IconChevronRight size={20} className="text-faint" />
+                <MenuLabel>Archived sessions</MenuLabel>
+                <MenuSubmenuArrow />
               </Menu.SubmenuTrigger>
               <Menu.Popup className="min-w-menu-wide max-w-[320px]">
                 <ArchivedSessionItems
@@ -762,7 +762,7 @@ export function WorkspacePane({
           {onArchiveWorkspace && workspaceSessions.length > 0 && (
             <Menu.Item onClick={onArchiveWorkspace}>
               <IconArchive size={20} className={MENU_ICON} />
-              <span className="grow">Archive workspace</span>
+              <MenuLabel>Archive workspace</MenuLabel>
             </Menu.Item>
           )}
           {onDeleteWorkspace && (
@@ -781,7 +781,7 @@ export function WorkspacePane({
               }
             >
               <IconTrash size={20} />
-              <span className="grow">Delete workspace</span>
+              <MenuLabel>Delete workspace</MenuLabel>
             </Menu.Item>
           )}
         </Menu.Popup>

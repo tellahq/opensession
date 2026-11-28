@@ -29,7 +29,7 @@ import {
   PANEL_TABS,
 } from "../../lib/session-panel-classes";
 import { cn } from "../../ui/cn";
-import { ContextMenu, MENU_ICON } from "../../ui/menu";
+import { ContextMenu, MENU_ICON, MenuLabel } from "../../ui/menu";
 import { Tooltip } from "../../ui/tooltip";
 import {
   IconExpand,
@@ -243,13 +243,13 @@ export function SidePanelHost({
                 {onMoveToMain && isDockable(tab) && (
                   <ContextMenu.Item onClick={() => onMoveToMain(tab)}>
                     <IconExpand size={20} className={MENU_ICON} />
-                    <span className="grow">Move to main tabs</span>
+                    <MenuLabel>Move to main tabs</MenuLabel>
                   </ContextMenu.Item>
                 )}
                 {closable && (
                   <ContextMenu.Item onClick={() => onCloseTab(tab)}>
                     <IconX size={20} className={MENU_ICON} />
-                    <span className="grow">Close tab</span>
+                    <MenuLabel>Close tab</MenuLabel>
                   </ContextMenu.Item>
                 )}
               </ContextMenu.Popup>
@@ -310,7 +310,7 @@ export function SidePanelHost({
             onClick={() => select(tab)}
           >
             <span className="text-dim">{tabIcon(tab)}</span>
-            <span className="grow truncate">{label(tab)}</span>
+            <MenuLabel>{label(tab)}</MenuLabel>
             {count(tab)}
           </button>
         ))}

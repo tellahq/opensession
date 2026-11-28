@@ -10,10 +10,15 @@ import {
   type TicketLabel,
 } from "../lib/plain-ticket";
 import type { SupportThread } from "../lib/types";
-import { ContextMenu, MENU_ICON, Menu } from "../ui/menu";
+import {
+  ContextMenu,
+  MENU_ICON,
+  Menu,
+  MenuLabel,
+  MenuSubmenuArrow,
+} from "../ui/menu";
 import {
   IconArrowUpRight,
-  IconChevronRight,
   IconFlag,
   IconForbid,
   IconPerson,
@@ -72,7 +77,7 @@ export function SupportTicketContextMenu({
   );
 }
 
-const SUB_ARROW = <IconChevronRight size={20} className="text-faint" />;
+const SUB_ARROW = <MenuSubmenuArrow />;
 
 /** Mounted only while the menu is open, so a queue of a hundred rows asks
  *  Plain for its teammates and labels once someone right-clicks, not before. */
@@ -103,12 +108,12 @@ function TicketMenuBody({
         onClick={() => onChange({ kind: "status", status: "done" })}
       >
         <DoneIcon size={20} className={plainStatusInk("DONE")} />
-        <span className="grow">Mark done</span>
+        <MenuLabel>Mark done</MenuLabel>
       </ContextMenu.Item>
       <ContextMenu.SubmenuRoot>
         <ContextMenu.SubmenuTrigger>
           <SnoozeIcon size={20} className={plainStatusInk("SNOOZED")} />
-          <span className="grow">Snooze</span>
+          <MenuLabel>Snooze</MenuLabel>
           {SUB_ARROW}
         </ContextMenu.SubmenuTrigger>
         <Menu.Popup>
@@ -132,7 +137,7 @@ function TicketMenuBody({
       <ContextMenu.SubmenuRoot>
         <ContextMenu.SubmenuTrigger>
           <IconFlag size={20} className={flagTone ?? MENU_ICON} />
-          <span className="grow">Priority</span>
+          <MenuLabel>Priority</MenuLabel>
           <ContextMenu.Shortcut>
             {priorityLabel(thread.priority)}
           </ContextMenu.Shortcut>
@@ -148,7 +153,7 @@ function TicketMenuBody({
       <ContextMenu.SubmenuRoot>
         <ContextMenu.SubmenuTrigger>
           <IconPerson size={20} className={MENU_ICON} />
-          <span className="grow">Assign</span>
+          <MenuLabel>Assign</MenuLabel>
           {thread.assignee && (
             <ContextMenu.Shortcut className="max-w-[120px] truncate">
               {thread.assignee.name}
@@ -178,7 +183,7 @@ function TicketMenuBody({
       <ContextMenu.SubmenuRoot>
         <ContextMenu.SubmenuTrigger>
           <IconTag size={20} className={MENU_ICON} />
-          <span className="grow">Labels</span>
+          <MenuLabel>Labels</MenuLabel>
           {labels.length > 0 && (
             <ContextMenu.Shortcut className="max-w-[120px] truncate">
               {labels.length > 1
@@ -205,7 +210,7 @@ function TicketMenuBody({
           render={<a href={plainUrl} target="_blank" rel="noreferrer" />}
         >
           <IconArrowUpRight size={20} className={MENU_ICON} />
-          <span className="grow">Open in Plain</span>
+          <MenuLabel>Open in Plain</MenuLabel>
         </ContextMenu.Item>
       )}
       <ContextMenu.Item
@@ -220,7 +225,7 @@ function TicketMenuBody({
         }}
       >
         <IconForbid size={20} />
-        <span className="grow">Mark as spam</span>
+        <MenuLabel>Mark as spam</MenuLabel>
       </ContextMenu.Item>
     </>
   );

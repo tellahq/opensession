@@ -22,7 +22,7 @@ import {
 import { noAutofill } from "../../lib/composer-autofill";
 import { cn } from "../../ui/cn";
 import { Button } from "../../ui/button";
-import { MenuShortcut } from "../../ui/menu";
+import { MenuShortcut, MenuLabel } from "../../ui/menu";
 import { Modal } from "../../ui/modal";
 import { composerMorph } from "../../ui/motion";
 import { Tooltip } from "../../ui/tooltip";
@@ -259,9 +259,9 @@ export function ComposerAddMenu({
               <span className={composerMenuIcon}>
                 <IconPaperclip size={22} />
               </span>
-              <span className="grow whitespace-nowrap">
+              <MenuLabel>
                 {canAttachFiles ? "Attach files" : "Attach an image"}
-              </span>
+              </MenuLabel>
               {!isPhone && attachChord && (
                 <MenuShortcut>{attachChord}</MenuShortcut>
               )}
@@ -276,7 +276,7 @@ export function ComposerAddMenu({
               <span className={composerMenuIcon}>
                 <IconAtSign size={22} />
               </span>
-              <span className="grow whitespace-nowrap">Reference a file</span>
+              <MenuLabel>Reference a file</MenuLabel>
               {/* Not a chord: typing @ in the field opens the same
                   picker, which is the faster way once you know it.
                   Hidden on phones, where there are no keys to press —
@@ -296,9 +296,7 @@ export function ComposerAddMenu({
               <span className={composerMenuIcon}>
                 <IconCrosshair size={22} />
               </span>
-              <span className="grow whitespace-nowrap">
-                {goal ? "Edit goal" : "Set a goal"}
-              </span>
+              <MenuLabel>{goal ? "Edit goal" : "Set a goal"}</MenuLabel>
             </ComposerPressButton>
           )}
           {onNoteModeChange && (
@@ -316,9 +314,9 @@ export function ComposerAddMenu({
               <span className={composerMenuIcon}>
                 <IconNote size={22} />
               </span>
-              <span className="grow whitespace-nowrap">
+              <MenuLabel>
                 {noteMode ? "Back to prompting" : "Write a team note"}
-              </span>
+              </MenuLabel>
             </ComposerPressButton>
           )}
           {onPstackModeChange && (
@@ -339,9 +337,9 @@ export function ComposerAddMenu({
               <span className={composerMenuIcon}>
                 <IconChecklist size={22} />
               </span>
-              <span className="grow whitespace-nowrap">
+              <MenuLabel>
                 {pstackMode ? "Turn off pstack mode" : "Turn on pstack mode"}
-              </span>
+              </MenuLabel>
             </ComposerPressButton>
           )}
           {menuExtra?.({ close: () => setMenu(null) })}

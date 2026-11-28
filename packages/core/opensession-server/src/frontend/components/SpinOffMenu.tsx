@@ -2,9 +2,9 @@ import { toast } from "../ui/toast";
 import { AGENT_NAME } from "../lib/brand";
 import React, { useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { Menu, MENU_ICON } from "../ui/menu";
+import { Menu, MENU_ICON, MenuLabel, MenuSubmenuArrow } from "../ui/menu";
 import { Modal } from "../ui/modal";
-import { IconChevronRight, IconSparkle } from "./icons";
+import { IconSparkle } from "./icons";
 import type {
   TranscriptEntry,
   UnifiedSession,
@@ -189,8 +189,8 @@ export function SpinOffMenu({
               the session menu and owns it. Spin off hands the transcript to
               a fresh agent run rather than branching this one. */}
           <IconSparkle size={20} className={MENU_ICON} />
-          <span className="grow">Spin off</span>
-          <IconChevronRight size={20} className="text-faint" />
+          <MenuLabel>Spin off</MenuLabel>
+          <MenuSubmenuArrow />
         </Menu.SubmenuTrigger>
         <Menu.Popup className="w-80 overflow-hidden p-0">
           {isAsk && (

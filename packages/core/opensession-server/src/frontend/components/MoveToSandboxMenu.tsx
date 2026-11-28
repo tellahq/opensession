@@ -9,10 +9,10 @@ import {
   sandboxProviderLabel,
   splitSandboxChoice,
 } from "../lib/ready-sandbox-providers";
-import { Menu, MENU_ICON } from "../ui/menu";
+import { Menu, MENU_ICON, MenuLabel, MenuSubmenuArrow } from "../ui/menu";
 import type { ConfirmRequest } from "../ui/confirm";
 import { toast } from "../ui/toast";
-import { IconBox, IconChevronRight } from "./icons";
+import { IconBox } from "./icons";
 import { getCurrentUser } from "./UserPicker";
 
 /** What decides whether a session may move between machines. */
@@ -187,10 +187,8 @@ export function MoveToSandboxMenu({
         data-testid="move-to-sandbox"
       >
         <IconBox size={20} className={MENU_ICON} />
-        <span className="grow">
-          {current ? "Move session" : "Move to Sandbox"}
-        </span>
-        <IconChevronRight size={20} className="text-faint" />
+        <MenuLabel>{current ? "Move session" : "Move to Sandbox"}</MenuLabel>
+        <MenuSubmenuArrow />
       </Menu.SubmenuTrigger>
       <Menu.Popup className="max-w-[300px]">
         {current && (
@@ -198,7 +196,7 @@ export function MoveToSandboxMenu({
             onClick={pickHost}
             title="Move this session back to a worktree on this server"
           >
-            <span className="grow">This machine</span>
+            <MenuLabel>This machine</MenuLabel>
           </Menu.Item>
         )}
         {providers === null ? (
@@ -218,7 +216,7 @@ export function MoveToSandboxMenu({
               onClick={() => pickSandbox(provider)}
               title={`Move this session to ${sandboxProviderLabel(provider)}`}
             >
-              <span className="grow">{sandboxProviderLabel(provider)}</span>
+              <MenuLabel>{sandboxProviderLabel(provider)}</MenuLabel>
             </Menu.Item>
           ))
         )}

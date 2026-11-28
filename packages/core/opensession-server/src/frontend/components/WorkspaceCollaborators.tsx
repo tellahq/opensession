@@ -28,8 +28,8 @@ import {
   WS_SUMMARY_STATE,
 } from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
-import { Menu, MENU_ICON } from "../ui/menu";
-import { IconChevronDown, IconChevronRight, IconPeople } from "./icons";
+import { Menu, MENU_ICON, MenuLabel, MenuSubmenuArrow } from "../ui/menu";
+import { IconChevronDown, IconPeople } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser, TEAM } from "./UserPicker";
 import { WorkspaceSummaryAdd } from "./WorkspaceSummaryAdd";
@@ -210,8 +210,8 @@ export function CollaboratorsSubmenu({
     <Menu.SubmenuRoot>
       <Menu.SubmenuTrigger title="Teammates who get this workspace in their sidebar">
         <IconPeople size={20} className={MENU_ICON} />
-        <span className="grow">Collaborators</span>
-        <IconChevronRight size={20} className="text-faint" />
+        <MenuLabel>Collaborators</MenuLabel>
+        <MenuSubmenuArrow />
       </Menu.SubmenuTrigger>
       <Menu.Popup>
         <CollaboratorMenuItems {...state} />

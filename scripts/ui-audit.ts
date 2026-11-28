@@ -587,6 +587,17 @@ const SIGNALS: Signal[] = [
       ),
   },
   {
+    id: "hand-rolled-menu-label",
+    instead:
+      "<MenuLabel> (ui/menu): a row's words grow into its free width and truncate, one rule for every menu, where a bare grow span wraps or not depending on who wrote it",
+    exempt: ["styles/", "ui/"],
+    count: (source) =>
+      occurrences(
+        stripComments(source),
+        /<span className="grow(?: truncate| whitespace-nowrap)?">/g,
+      ),
+  },
+  {
     id: "off-scale-z",
     instead:
       "a named stacking layer, z-<name> or layer.<name> (base-theme.css --layer-*), or a small integer (-z-1 to z-9) for order inside a component",

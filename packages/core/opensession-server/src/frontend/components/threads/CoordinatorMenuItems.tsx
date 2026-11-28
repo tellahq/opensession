@@ -6,7 +6,7 @@ import { errorMessage } from "../../lib/error-message";
 import { composerMenuIcon, composerMenuItem } from "../../lib/composer-classes";
 import type { UnifiedSession } from "../../lib/types";
 import { useWorkspaceRecord } from "../../lib/workspace-records";
-import { Menu, MENU_ICON } from "../../ui/menu";
+import { Menu, MENU_ICON, MenuLabel } from "../../ui/menu";
 import { toast } from "../../ui/toast";
 import { ComposerPressButton } from "../composer/ComposerControls";
 import { IconDelegate, IconGear } from "../icons";
@@ -61,9 +61,9 @@ export function CoordinatorMenuItems({
         <span className={composerMenuIcon}>
           <IconDelegate size={22} />
         </span>
-        <span className="grow whitespace-nowrap">
+        <MenuLabel>
           {on ? "Turn off coordinator mode" : "Turn on coordinator mode"}
-        </span>
+        </MenuLabel>
       </ComposerPressButton>
       {workspace && (
         <ComposerPressButton
@@ -78,7 +78,7 @@ export function CoordinatorMenuItems({
           <span className={composerMenuIcon}>
             <IconGear size={22} />
           </span>
-          <span className="grow whitespace-nowrap">Workspace settings…</span>
+          <MenuLabel>Workspace settings…</MenuLabel>
         </ComposerPressButton>
       )}
     </>
@@ -105,9 +105,9 @@ export function CoordinatorOverflowItems({
         }}
       >
         <IconDelegate size={20} className={MENU_ICON} />
-        <span className="grow">
+        <MenuLabel>
           {on ? "Turn off coordinator mode" : "Turn on coordinator mode"}
-        </span>
+        </MenuLabel>
       </Menu.Item>
       {workspace && (
         <Menu.Item
@@ -117,7 +117,7 @@ export function CoordinatorOverflowItems({
           }}
         >
           <IconGear size={20} className={MENU_ICON} />
-          <span className="grow">Workspace settings…</span>
+          <MenuLabel>Workspace settings…</MenuLabel>
         </Menu.Item>
       )}
     </>

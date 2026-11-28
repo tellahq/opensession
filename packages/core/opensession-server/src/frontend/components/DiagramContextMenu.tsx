@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Menu, MENU_ICON } from "../ui/menu";
+import { Menu, MENU_ICON, MenuLabel } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { diagramCanvasColor } from "../lib/diagram-media";
 import { copyImageToClipboard } from "../lib/image-clipboard";
@@ -83,7 +83,7 @@ export function DiagramContextMenu() {
               ) : (
                 <IconCopy size={20} className={MENU_ICON} />
               )}
-              <span className="grow">{copied ? "Copied" : "Copy image"}</span>
+              <MenuLabel>{copied ? "Copied" : "Copy image"}</MenuLabel>
             </Menu.Item>
             <Menu.Item
               render={
@@ -95,7 +95,7 @@ export function DiagramContextMenu() {
               }
             >
               <IconArrowDown size={20} className={MENU_ICON} />
-              <span className="grow">Download</span>
+              <MenuLabel>Download</MenuLabel>
             </Menu.Item>
           </>
         ) : null}

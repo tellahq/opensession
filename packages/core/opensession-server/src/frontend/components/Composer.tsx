@@ -102,7 +102,7 @@ import { noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
-import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
+import { ContextMenu, Menu, MENU_ICON, MenuLabel } from "../ui/menu";
 import {
   effectiveSendKey,
   insideOpenFence,
@@ -2213,7 +2213,7 @@ export function Composer({
                 <ContextMenu.Popup className="min-w-menu-wide">
                   <ContextMenu.Item onClick={() => pickBusySend("queue")}>
                     <IconReturn size={20} />
-                    <span className="grow">Queue after run finishes</span>
+                    <MenuLabel>Queue after run finishes</MenuLabel>
                     {busySendKeys("queue") && (
                       <ContextMenu.Shortcut>
                         {busySendKeys("queue")}
@@ -2226,7 +2226,7 @@ export function Composer({
                   </ContextMenu.Item>
                   <ContextMenu.Item onClick={() => pickBusySend("steer")}>
                     <IconArrowUp size={20} />
-                    <span className="grow">Steer into running turn</span>
+                    <MenuLabel>Steer into running turn</MenuLabel>
                     {busySendKeys("steer") && (
                       <ContextMenu.Shortcut>
                         {busySendKeys("steer")}

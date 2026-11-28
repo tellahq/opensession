@@ -1,7 +1,11 @@
 import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
-import { IconCheck, type IconSize } from "../components/icons";
+import {
+  IconCheck,
+  IconChevronRight,
+  type IconSize,
+} from "../components/icons";
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "./cn";
 import { POPUP_HOOK } from "./popup-classes";
@@ -283,6 +287,29 @@ function CheckboxItem({
  */
 export const MENU_ICON = "text-dim";
 
+/** A row's label: grows into the row's free width and truncates. Exported on
+ * its own for the hand-rolled rows (the composer's "+" menu) as well. */
+export function MenuLabel({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return <span {...sx(popup.label, className)}>{children}</span>;
+}
+
+/** The trailing chevron on a row that opens a submenu. */
+export function MenuSubmenuArrow() {
+  return (
+    <IconChevronRight
+      size={20}
+      aria-hidden
+      {...stylex.props(popup.submenuArrow)}
+    />
+  );
+}
+
 /** Right-aligned keyboard-shortcut hint on a menu row ("⌘ W"). Place it after
  * the row's `grow` label so it pins to the trailing edge. Exported on its own
  * as well as on the Menu namespaces: the composer's "+" menu is a hand-rolled
@@ -354,6 +381,8 @@ export const ContextMenu = {
   Popup: ContextPopup,
   Item,
   Separator,
+  Label: MenuLabel,
+  SubmenuArrow: MenuSubmenuArrow,
   Shortcut: MenuShortcut,
   Check: MenuCheck,
   // Grouping and checkable rows are the plain Menu parts for the same reason
@@ -376,6 +405,8 @@ export const Menu = {
   Popup,
   Item,
   Separator,
+  Label: MenuLabel,
+  SubmenuArrow: MenuSubmenuArrow,
   Shortcut: MenuShortcut,
   Check: MenuCheck,
   Group: BaseMenu.Group,

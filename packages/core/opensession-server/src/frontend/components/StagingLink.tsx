@@ -9,7 +9,7 @@ import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { toast } from "../ui/toast";
 import { CopyCheck, useCopy } from "../ui/copy";
-import { ContextMenu, MENU_ICON } from "../ui/menu";
+import { ContextMenu, MENU_ICON, MenuLabel } from "../ui/menu";
 import {
   IconArrowUpRight,
   IconCheck,
@@ -346,7 +346,7 @@ export function StagingLink({
           }
         >
           <IconArrowUpRight size={20} className={MENU_ICON} />
-          <span className="grow">Open in browser</span>
+          <MenuLabel>Open in browser</MenuLabel>
         </ContextMenu.Item>
         {/* Keeps the popup open so the checkmark lands where it was clicked,
 				    matching the PR menu's copy rows. */}
@@ -356,7 +356,7 @@ export function StagingLink({
           ) : (
             <IconCopy size={20} className={MENU_ICON} />
           )}
-          <span className="grow">{copied ? "Copied" : "Copy link"}</span>
+          <MenuLabel>{copied ? "Copied" : "Copy link"}</MenuLabel>
         </ContextMenu.Item>
       </ContextMenu.Popup>
     </ContextMenu.Root>

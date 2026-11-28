@@ -63,7 +63,7 @@ import {
   WS_SUMMARY_STATUS_ROW,
 } from "../lib/workspace-summary-classes";
 import { Tooltip } from "../ui/tooltip";
-import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
+import { ContextMenu, Menu, MENU_ICON, MenuLabel } from "../ui/menu";
 import { TextShimmer } from "../ui/text-shimmer";
 import { duration, ease } from "../ui/motion";
 import { sendPrPrompt, usePromptPending } from "../lib/pr-prompt-pending";
@@ -402,7 +402,7 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
         }
       >
         <IconArrowUpRight size={20} className={MENU_ICON} />
-        <span className="grow">Open on {provider.name}</span>
+        <MenuLabel>Open on {provider.name}</MenuLabel>
         {openChord && <ContextMenu.Shortcut>{openChord}</ContextMenu.Shortcut>}
       </ContextMenu.Item>
       <ContextMenu.Item
@@ -414,9 +414,7 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
         ) : (
           <IconCopy size={20} className={MENU_ICON} />
         )}
-        <span className="grow">
-          {copied === "link" ? "Copied" : "Copy link"}
-        </span>
+        <MenuLabel>{copied === "link" ? "Copied" : "Copy link"}</MenuLabel>
         {copyChord && <ContextMenu.Shortcut>{copyChord}</ContextMenu.Shortcut>}
       </ContextMenu.Item>
       <ContextMenu.Item
@@ -428,9 +426,7 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
         ) : (
           <IconHash size={20} className={MENU_ICON} />
         )}
-        <span className="grow">
-          {copied === "number" ? "Copied" : "Copy number"}
-        </span>
+        <MenuLabel>{copied === "number" ? "Copied" : "Copy number"}</MenuLabel>
       </ContextMenu.Item>
     </>
   );
@@ -566,9 +562,9 @@ function PrRefChips({
                 <span
                   className={`${PR_SIB_DOT} ${PR_SIB_DOT_BG[refTone(ref)]}`}
                 />
-                <span className="grow">
+                <MenuLabel>
                   {repoLabel(ref.repo)} #{ref.number}
-                </span>
+                </MenuLabel>
               </Menu.Item>
             ))}
           </Menu.Popup>

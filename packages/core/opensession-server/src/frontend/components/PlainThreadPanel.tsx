@@ -21,7 +21,7 @@ import {
   uploadPlainAttachmentApi,
 } from "../lib/api";
 import { BASE_PATH } from "../lib/base";
-import { MENU_ICON, Menu } from "../ui/menu";
+import { MENU_ICON, Menu, MenuLabel } from "../ui/menu";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody } from "./MarkdownBody";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
@@ -621,18 +621,16 @@ export function PlainThreadActions({
                   }
                 >
                   <IconArrowUpRight size={20} className={MENU_ICON} />
-                  <span className="grow">Open in Plain</span>
+                  <MenuLabel>Open in Plain</MenuLabel>
                 </Menu.Item>
               )}
               <Menu.Item onClick={renameThread}>
                 <IconPencil size={20} className={MENU_ICON} />
-                <span className="grow">Rename</span>
+                <MenuLabel>Rename</MenuLabel>
               </Menu.Item>
               <Menu.Item onClick={toggleSpam}>
                 <IconForbid size={20} className={MENU_ICON} />
-                <span className="grow">
-                  {isSpam ? "Not spam" : "Mark as spam"}
-                </span>
+                <MenuLabel>{isSpam ? "Not spam" : "Mark as spam"}</MenuLabel>
               </Menu.Item>
             </Menu.Popup>
           </Menu.Root>

@@ -178,6 +178,17 @@ export const popup = stylex.create({
     height: geometry.hairline,
     backgroundColor: color.line,
   },
+  /** A row's words: they take the row's free width and end in an ellipsis
+   *  rather than wrapping, so every row stays one line tall. */
+  label: {
+    flexGrow: 1,
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  /** The chevron that says a row opens a submenu. */
+  submenuArrow: { flexShrink: 0, color: color.faint },
   groupLabel: {
     paddingInline: space.s8,
     paddingBottom: space.s4,

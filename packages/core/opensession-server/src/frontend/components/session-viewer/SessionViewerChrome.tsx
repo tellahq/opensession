@@ -57,7 +57,6 @@ import { ThreadsDetailsSection } from "../threads/ThreadsPanel";
 import { CoordinatorOverflowItems } from "../threads/CoordinatorMenuItems";
 import {
   IconArchive,
-  IconChevronRight,
   IconCopy,
   IconDesk,
   IconDotsHorizontal,
@@ -77,7 +76,7 @@ import { KeepInSidebarIcon } from "../sidebar/KeepInSidebarMark";
 import { Button } from "../../ui/button";
 import type { ConfirmRequest } from "../../ui/confirm";
 import { CopyCheck } from "../../ui/copy";
-import { Menu, MENU_ICON } from "../../ui/menu";
+import { Menu, MENU_ICON, MenuLabel, MenuSubmenuArrow } from "../../ui/menu";
 import { PulseDot } from "../../ui/status";
 import { Tooltip } from "../../ui/tooltip";
 import {
@@ -489,7 +488,7 @@ export function SessionViewerChrome({
             (inMenu ? (
               <Menu.Item onClick={keepInSidebar} title="Add to sidebar">
                 <KeepInSidebarIcon className={MENU_ICON} />
-                <span className="grow">Add to sidebar</span>
+                <MenuLabel>Add to sidebar</MenuLabel>
               </Menu.Item>
             ) : (
               <Button
@@ -528,13 +527,13 @@ export function SessionViewerChrome({
                   size={20}
                   className={MENU_ICON}
                 />
-                <span className="grow">
+                <MenuLabel>
                   {copied
                     ? "Copied"
                     : workspaceScopedMenu
                       ? "Share workspace"
                       : "Share"}
-                </span>
+                </MenuLabel>
               </Menu.Item>
             ) : (
               <Button
@@ -566,7 +565,7 @@ export function SessionViewerChrome({
               title="Start a new session in this workspace"
             >
               <IconPlus size={20} className={MENU_ICON} />
-              <span className="grow">New session in workspace</span>
+              <MenuLabel>New session in workspace</MenuLabel>
             </Menu.Item>
           );
           // Closed sessions of this workspace. They normally hang off the tab
@@ -580,8 +579,8 @@ export function SessionViewerChrome({
               <Menu.SubmenuRoot>
                 <Menu.SubmenuTrigger title="Closed sessions in this workspace">
                   <IconHistory size={20} className={MENU_ICON} />
-                  <span className="grow">Archived sessions</span>
-                  <IconChevronRight size={20} className="text-faint" />
+                  <MenuLabel>Archived sessions</MenuLabel>
+                  <MenuSubmenuArrow />
                 </Menu.SubmenuTrigger>
                 <Menu.Popup className="min-w-menu-wide max-w-[320px]">
                   <ArchivedSessionItems
@@ -608,8 +607,8 @@ export function SessionViewerChrome({
             <Menu.SubmenuRoot>
               <Menu.SubmenuTrigger title="Copy this session's transcript">
                 <IconCopy size={20} className={MENU_ICON} />
-                <span className="grow">Copy transcript</span>
-                <IconChevronRight size={20} className="text-faint" />
+                <MenuLabel>Copy transcript</MenuLabel>
+                <MenuSubmenuArrow />
               </Menu.SubmenuTrigger>
               <Menu.Popup>
                 <Menu.Item
@@ -620,7 +619,7 @@ export function SessionViewerChrome({
                   title="Copy a trimmed transcript of this session"
                 >
                   <IconListCircles size={20} className={MENU_ICON} />
-                  <span className="grow">Concise</span>
+                  <MenuLabel>Concise</MenuLabel>
                   {copyTranscriptLabel && (
                     <Menu.Shortcut>{copyTranscriptLabel}</Menu.Shortcut>
                   )}
@@ -633,7 +632,7 @@ export function SessionViewerChrome({
                   title="Copy the complete transcript of this session"
                 >
                   <IconFile size={20} className={MENU_ICON} />
-                  <span className="grow">Full</span>
+                  <MenuLabel>Full</MenuLabel>
                 </Menu.Item>
               </Menu.Popup>
             </Menu.SubmenuRoot>
@@ -666,7 +665,7 @@ export function SessionViewerChrome({
               }}
             >
               <IconGlobe size={20} className={MENU_ICON} />
-              <span className="grow">Portals</span>
+              <MenuLabel>Portals</MenuLabel>
               {livePortals > 0 && (
                 <span className="shrink-0 tabular-nums text-faint">
                   {livePortals} live
@@ -690,11 +689,11 @@ export function SessionViewerChrome({
                     title="Move this session into an isolated worktree"
                   >
                     <IconNewBranch size={20} className={MENU_ICON} />
-                    <span className="grow">
+                    <MenuLabel>
                       {branchActionBusy === "move"
                         ? "Moving…"
                         : "Move to branch"}
-                    </span>
+                    </MenuLabel>
                   </Menu.Item>
                   <Menu.Item
                     disabled={!connected || isBusy || branchActionBusy !== null}
@@ -706,7 +705,7 @@ export function SessionViewerChrome({
                     title="Move to a branch and create a pull request"
                   >
                     <IconPullRequest size={20} className={MENU_ICON} />
-                    <span className="grow">Create PR</span>
+                    <MenuLabel>Create PR</MenuLabel>
                   </Menu.Item>
                 </>
               ) : menuGit.branch ? (
@@ -716,7 +715,7 @@ export function SessionViewerChrome({
                   title="Ask this session to create a pull request"
                 >
                   <IconPullRequest size={20} className={MENU_ICON} />
-                  <span className="grow">Create PR</span>
+                  <MenuLabel>Create PR</MenuLabel>
                 </Menu.Item>
               ) : null
             ) : null;
@@ -741,11 +740,11 @@ export function SessionViewerChrome({
                   }
                 >
                   <IconPencil size={20} className={MENU_ICON} />
-                  <span className="grow">
+                  <MenuLabel>
                     {workspaceScopedMenu
                       ? "Rename workspace"
                       : "Rename session"}
-                  </span>
+                  </MenuLabel>
                 </Menu.Item>
               )}
             </>
@@ -763,7 +762,7 @@ export function SessionViewerChrome({
               title="Duplicate this session with its current context"
             >
               <IconCopy size={20} className={MENU_ICON} />
-              <span className="grow">Duplicate session</span>
+              <MenuLabel>Duplicate session</MenuLabel>
             </Menu.Item>
           );
           // Start something from this session. Renders nothing until the session
@@ -795,7 +794,7 @@ export function SessionViewerChrome({
               }
             >
               <IconArchive size={20} className={MENU_ICON} />
-              <span className="grow">
+              <MenuLabel>
                 {archiving
                   ? session.archived
                     ? "Unarchiving…"
@@ -803,7 +802,7 @@ export function SessionViewerChrome({
                   : session.archived
                     ? "Unarchive session"
                     : "Archive session"}
-              </span>
+              </MenuLabel>
               {archiveShortcutLabel && (
                 <Menu.Shortcut>{archiveShortcutLabel}</Menu.Shortcut>
               )}
@@ -821,7 +820,7 @@ export function SessionViewerChrome({
               title="Delete session"
             >
               <IconTrash size={20} />
-              <span className="grow">Delete session</span>
+              <MenuLabel>Delete session</MenuLabel>
             </Menu.Item>
           );
           const workspaceLifecycleActions = workspaceScopedMenu && (
@@ -829,7 +828,7 @@ export function SessionViewerChrome({
               {onArchiveWorkspace && (workspaceSessions?.length ?? 0) > 0 && (
                 <Menu.Item onClick={onArchiveWorkspace}>
                   <IconArchive size={20} className={MENU_ICON} />
-                  <span className="grow">Archive workspace</span>
+                  <MenuLabel>Archive workspace</MenuLabel>
                 </Menu.Item>
               )}
               {onDeleteWorkspace && (
@@ -848,7 +847,7 @@ export function SessionViewerChrome({
                   title="Delete workspace"
                 >
                   <IconTrash size={20} />
-                  <span className="grow">Delete workspace</span>
+                  <MenuLabel>Delete workspace</MenuLabel>
                 </Menu.Item>
               )}
             </>
@@ -874,7 +873,7 @@ export function SessionViewerChrome({
                   title={session.automation}
                 >
                   <IconRobot size={20} className={MENU_ICON} />
-                  <span className="grow">Automation</span>
+                  <MenuLabel>Automation</MenuLabel>
                 </Menu.Item>
               )}
               {session.linearIssue?.url &&
@@ -888,9 +887,7 @@ export function SessionViewerChrome({
                       />
                     }
                   >
-                    <span className="grow">
-                      {session.linearIssue.identifier}
-                    </span>
+                    <MenuLabel>{session.linearIssue.identifier}</MenuLabel>
                   </Menu.Item>
                 ) : (
                   <a
@@ -910,7 +907,7 @@ export function SessionViewerChrome({
                       <a href={plainUrl} target="_blank" rel="noopener" />
                     }
                   >
-                    <span className="grow">Plain ↗</span>
+                    <MenuLabel>Plain ↗</MenuLabel>
                   </Menu.Item>
                 ) : (
                   <a
@@ -929,7 +926,7 @@ export function SessionViewerChrome({
                       <a href={feedRef.url} target="_blank" rel="noopener" />
                     }
                   >
-                    <span className="grow">{feedRefLabel} ↗</span>
+                    <MenuLabel>{feedRefLabel} ↗</MenuLabel>
                   </Menu.Item>
                 ) : (
                   <a
