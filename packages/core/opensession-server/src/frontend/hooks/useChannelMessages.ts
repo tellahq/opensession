@@ -9,9 +9,16 @@ import {
   uploadFile,
   type ChannelMessage,
 } from "../lib/api/slack-channels";
-import { toggledReactions } from "../lib/channel-messages";
+import {
+  firstUnread,
+  toggledReactions,
+  tsBefore,
+} from "../lib/channel-messages";
 import { errorMessage } from "../lib/error-message";
-import { markConversationSeen } from "../lib/slack-conversations";
+import {
+  markConversationSeen,
+  markConversationUnread,
+} from "../lib/slack-conversations";
 import { toast } from "../ui/toast";
 
 const POLL_MS = 15_000;
@@ -35,6 +42,13 @@ export interface ChannelMessagesState {
   /** Delete the person's own message. */
   remove: (message: ChannelMessage) => void;
   reload: () => void;
+  /** Where Slack's "New" line goes: the first message from someone else
+   *  that was unread when the conversation opened. */
+  unreadFrom?: string;
+  /** Leave `message` and everything after it unread, until you come back. */
+  markUnread: (message: ChannelMessage) => void;
+  /** Esc: read up to the newest message and drop the "New" line. */
+  markAllRead: () => void;
 }
 
 /**
@@ -55,11 +69,15 @@ export function useChannelMessages(
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState<string | null>(null);
   const lastMarked = useRef("");
+  // The read cursor as the conversation opened, for the "New" line.
+  const [lastRead, setLastRead] = useState<string | null>(null);
+  // Marked unread: stop reading new messages until the person comes back.
+  const heldUnread = useRef(false);
   // The open conversation's fetch, so a send can refresh it in place.
   const refresh = useRef<(() => Promise<void>) | null>(null);
 
   const markNewest = useEffectEvent((page: ChannelMessage[], user: boolean) => {
-    if (thread || !user) return;
+    if (thread || !user || heldUnread.current) return;
     const newest = page.at(-1)?.ts;
     if (!newest || newest === lastMarked.current) return;
     lastMarked.current = newest;
@@ -75,11 +93,16 @@ export function useChannelMessages(
     setError(null);
     setHasMore(false);
     setEditing(null);
+    setLastRead(null);
     lastMarked.current = "";
+    heldUnread.current = false;
+    let opening = !thread;
     const load = () =>
-      fetchMessages(channelId, { thread })
+      fetchMessages(channelId, { thread, read: opening })
         .then((page) => {
           if (!alive) return;
+          if (opening) setLastRead(page.lastRead ?? null);
+          opening = false;
           setAsUser(page.asUser);
           setHasMore((previous) => previous || page.hasMore);
           setMessages((previous) => {
@@ -111,6 +134,28 @@ export function useChannelMessages(
       if (timer) clearTimeout(timer);
     };
   }, [channelId, thread, reloadKey]);
+
+  function markUnread(message: ChannelMessage) {
+    if (thread || !asUser) return;
+    const cursor = tsBefore(message.ts);
+    heldUnread.current = true;
+    lastMarked.current = "";
+    setLastRead(cursor);
+    markConversationUnread(channelId);
+    void markRead(channelId, cursor).catch(() => {
+      toast("Couldn't mark it unread", { variant: "error" });
+    });
+  }
+
+  function markAllRead() {
+    heldUnread.current = false;
+    setLastRead(null);
+    const newest = messages.at(-1)?.ts;
+    if (thread || !asUser || !newest) return;
+    lastMarked.current = newest;
+    markConversationSeen(channelId);
+    void markRead(channelId, newest).catch(() => {});
+  }
 
   async function loadOlder() {
     const oldest = messages[0]?.ts;
@@ -220,5 +265,8 @@ export function useChannelMessages(
     edit,
     remove,
     reload: () => setReloadKey((key) => key + 1),
+    unreadFrom: firstUnread(messages, lastRead),
+    markUnread,
+    markAllRead,
   };
 }

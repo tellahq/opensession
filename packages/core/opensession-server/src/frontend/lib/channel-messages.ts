@@ -9,6 +9,7 @@ const GROUP_WINDOW_S = 5 * 60;
 
 export type MessageItem =
   | { kind: "day"; key: string; label: string }
+  | { kind: "new"; key: string }
   | { kind: "message"; key: string; message: ChannelMessage; head: boolean };
 
 export function tsDate(ts: string): Date {
@@ -41,10 +42,37 @@ export function messageTime(ts: string): string {
   });
 }
 
-/** `messages` in order, with day dividers and grouping heads. */
+/** The first message someone else sent after `lastRead`, where Slack draws
+ *  its "New" line. */
+export function firstUnread(
+  messages: readonly ChannelMessage[],
+  lastRead: string | null,
+): string | undefined {
+  if (!lastRead) return undefined;
+  return messages.find(
+    (message) => Number(message.ts) > Number(lastRead) && !message.mine,
+  )?.ts;
+}
+
+/** The ts one microsecond before `ts`: a read cursor that leaves the
+ *  message at `ts` unread. */
+export function tsBefore(ts: string): string {
+  const [seconds = "0", fraction = ""] = ts.split(".");
+  const micros =
+    BigInt(seconds) * 1_000_000n +
+    BigInt(fraction.padEnd(6, "0").slice(0, 6)) -
+    1n;
+  const whole = micros / 1_000_000n;
+  const rest = micros % 1_000_000n;
+  return `${whole}.${rest.toString().padStart(6, "0")}`;
+}
+
+/** `messages` in order, with day dividers, grouping heads and, before
+ *  `unreadFrom`, the "New" line. */
 export function layoutMessages(
   messages: readonly ChannelMessage[],
   now = new Date(),
+  unreadFrom?: string,
 ): MessageItem[] {
   const out: MessageItem[] = [];
   let lastDay = "";
@@ -55,6 +83,10 @@ export function layoutMessages(
     if (day !== lastDay) {
       out.push({ kind: "day", key: `day:${day}`, label: dayLabel(date, now) });
       lastDay = day;
+      previous = undefined;
+    }
+    if (message.ts === unreadFrom) {
+      out.push({ kind: "new", key: "new" });
       previous = undefined;
     }
     const head =

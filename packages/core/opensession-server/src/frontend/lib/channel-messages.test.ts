@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ChannelMessage } from "./api/slack-channels";
 import {
+  firstUnread,
   layoutMessages,
   peopleLine,
   shortWhen,
   toggledReactions,
+  tsBefore,
 } from "./channel-messages";
 
 const at = (date: string, user = "UADA"): ChannelMessage => ({
@@ -28,7 +30,11 @@ test("groups a run from one person and divides days", () => {
   );
   expect(
     items.map((item) =>
-      item.kind === "day" ? item.label : item.head ? "head" : "follow",
+      item.kind === "day"
+        ? item.label
+        : item.kind === "message" && item.head
+          ? "head"
+          : "follow",
     ),
   ).toEqual(["Yesterday", "head", "follow", "head", "head", "Today", "head"]);
 });
@@ -81,4 +87,25 @@ describe("editing your own messages", () => {
     expect(lastEditable(messages)?.ts).toBe("2.0");
     expect(lastEditable(messages.slice(2))).toBeUndefined();
   });
+});
+
+test("the New line starts at the first message from someone else after the read cursor", () => {
+  const messages: ChannelMessage[] = [
+    { ...at("2026-11-27T09:00:00"), ts: "100.000100" },
+    { ...at("2026-11-27T09:01:00"), ts: "200.000100", mine: true },
+    { ...at("2026-11-27T09:02:00", "UGRACE"), ts: "300.000100" },
+  ];
+  expect(firstUnread(messages, "100.000100")).toBe("300.000100");
+  expect(firstUnread(messages, null)).toBeUndefined();
+  expect(firstUnread(messages, "300.000100")).toBeUndefined();
+  const items = layoutMessages(messages, new Date(300_000), "300.000100");
+  const at300 = items.findIndex((item) => item.key === "300.000100");
+  expect(items[at300 - 1]?.kind).toBe("new");
+  expect(items[at300]).toMatchObject({ head: true });
+});
+
+test("marking unread moves the cursor just before the message", () => {
+  expect(tsBefore("1795.000100")).toBe("1795.000099");
+  expect(tsBefore("1795.000000")).toBe("1794.999999");
+  expect(tsBefore("1795.5")).toBe("1795.499999");
 });

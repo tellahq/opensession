@@ -70,7 +70,7 @@ function MessageList({
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
-  const items = layoutMessages(state.messages);
+  const items = layoutMessages(state.messages, undefined, state.unreadFrom);
   const [confirm, confirmDialog] = useConfirm();
 
   // Opened from a search result: page back to the message if it is older
@@ -100,6 +100,23 @@ function MessageList({
   useEffect(() => {
     stepJump();
   }, [jumpTo, state.messages, state.loading, state.loadingOlder]);
+  // Open at the "New" line when there is one, as Slack does, once per visit.
+  const openedAtNew = useRef(false);
+  const openAtNew = useEffectEvent(() => {
+    if (openedAtNew.current || state.loading) return;
+    openedAtNew.current = true;
+    if (jumpTo || !state.unreadFrom) return;
+    const line = scrollRef.current?.querySelector("[data-new-line]");
+    if (!line) return;
+    stick.current = false;
+    line.scrollIntoView({ block: "start" });
+  });
+  useEffect(() => {
+    openAtNew();
+  }, [state.loading, state.unreadFrom]);
+  useEffect(() => {
+    openedAtNew.current = false;
+  }, [channelId]);
   useEffect(() => {
     if (!highlighted) return;
     const timer = setTimeout(() => setHighlighted(null), 2500);
@@ -191,7 +208,19 @@ function MessageList({
           <EmptyState className="py-10" title="No messages yet" />
         ) : (
           items.map((item) =>
-            item.kind === "day" ? (
+            item.kind === "new" ? (
+              // Slack's "New" line: a red rule with the word at its end.
+              <div
+                key={item.key}
+                data-new-line
+                role="separator"
+                aria-label="New messages"
+                className="my-1 flex scroll-mt-4 items-center gap-2 pr-5"
+              >
+                <span className="h-px flex-1 bg-red" />
+                <span className="text-meta font-semibold text-red">New</span>
+              </div>
+            ) : item.kind === "day" ? (
               // Slack's day divider: a rule across, the day in a pill on it.
               <div
                 key={item.key}
@@ -216,6 +245,11 @@ function MessageList({
                 }
                 onOpenThread={
                   onOpenThread ? () => onOpenThread(item.message.ts) : undefined
+                }
+                onMarkUnread={
+                  state.asUser && onOpenThread
+                    ? () => state.markUnread(item.message)
+                    : undefined
                 }
                 {...ownMessageProps(state, item.message, askDelete)}
               />
@@ -474,6 +508,17 @@ function ConversationView({
       alive = false;
     };
   }, [channelId]);
+
+  // Esc reads the conversation up to now and drops the "New" line, as in
+  // Slack, unless something else (a menu, a dialog, an edit) takes it.
+  const onEscape = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    if (main.unreadFrom) main.markAllRead();
+  });
+  useEffect(() => {
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, []);
 
   const head = info ?? listed;
   const label = head ? displayName(head) : "";

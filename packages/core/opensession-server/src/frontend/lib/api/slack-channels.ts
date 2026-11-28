@@ -86,6 +86,8 @@ export interface MessagesPage {
   hasMore: boolean;
   /** Read with the person's own grant (they can post). */
   asUser: boolean;
+  /** Asked for with `read`: where the person had read to. */
+  lastRead?: string;
 }
 
 const channelPath = (id: string) => `/slack/channels/${encodeURIComponent(id)}`;
@@ -102,10 +104,11 @@ export function fetchConversationInfo(id: string): Promise<ConversationInfo> {
 
 export function fetchMessages(
   id: string,
-  opts: { before?: string; thread?: string } = {},
+  opts: { before?: string; thread?: string; read?: boolean } = {},
 ): Promise<MessagesPage> {
   const params = new URLSearchParams();
   if (opts.before) params.set("before", opts.before);
+  if (opts.read) params.set("read", "1");
   if (opts.thread) {
     params.set("thread_ts", opts.thread);
     params.set("limit", "100");
