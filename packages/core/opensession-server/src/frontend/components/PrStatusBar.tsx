@@ -1301,7 +1301,7 @@ export function PrStatusBar({
         const forceItem = (
           <Menu.Item
             onClick={() => handleForceMerge(choices.bypasses)}
-            className="text-red data-[highlighted]:bg-red-soft"
+            tone="danger"
           >
             <IconWarningTriangle size={20} className="text-red" />
             <span className="min-w-0 flex-1 truncate">

@@ -703,10 +703,7 @@ function ProviderRow({
                 Discover models
               </Menu.Item>
             )}
-            <Menu.Item
-              onClick={() => onRemove(p)}
-              className="text-red data-[highlighted]:bg-red-soft"
-            >
+            <Menu.Item onClick={() => onRemove(p)} tone="danger">
               <IconTrash size={20} />
               Remove provider
             </Menu.Item>

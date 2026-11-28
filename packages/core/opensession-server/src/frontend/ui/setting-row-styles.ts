@@ -41,7 +41,7 @@ export const settingRow = stylex.create({
     width: "100%",
     alignItems: "center",
     gap: space.s12,
-    borderRadius: radius.md,
+    borderRadius: radius.popupRow,
     ["cornerShape"]: corner.squircle,
     paddingInline: space.s8,
     paddingBlock: { default: space.s8, [media.phone]: space.s12 },

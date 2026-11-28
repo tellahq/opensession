@@ -345,7 +345,7 @@ export function FilterPopover({
         </Menu.Root>
         {/* Bringing a project in is the one action here rather than a view
             setting, so it sits last, under a rule. */}
-        <div className="-mx-2 my-1 h-px bg-line" role="separator" />
+        <div className="mx-2 my-1 h-px bg-line" role="separator" />
         <Menu.Root>
           <Menu.Trigger className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE)}>
             <span className={SETTING_GLYPH}>

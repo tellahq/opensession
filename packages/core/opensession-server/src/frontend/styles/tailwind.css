@@ -484,8 +484,8 @@
   --container-card: 560px;
   /* A menu's floor (StyleX `geometry.popupMinWidth`), and the one wider step
 	   for a menu whose rows carry a second line or a submenu. `min-w-menu-wide`;
-	   a plain menu needs no class, the primitive already holds 200. */
-  --container-menu: 200px;
+	   a plain menu needs no class, the primitive already holds 220. */
+  --container-menu: 220px;
   --container-menu-wide: 240px;
 
   /* Motion. Without these the utility layer runs its own motion system: a

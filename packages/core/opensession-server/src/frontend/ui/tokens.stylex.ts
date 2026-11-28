@@ -84,6 +84,7 @@ export const color = stylex.defineConsts({
   accentControl: "var(--accent-control, var(--accent))",
   onAccentControl: "var(--on-accent-control, var(--on-accent))",
   panelSurface: "var(--panel-surface)",
+  /** A palette: denser glass than a menu, since it sits over a scrim. */
   /** The hairline a shell on a scrim needs: firmer than a menu's. */
   dialogRing: "var(--dialog-ring)",
   /** The dimming under a dialog, and the lighter one under a glass palette
@@ -162,6 +163,9 @@ export const radius = stylex.defineConsts({
   control: "calc(12px * var(--rf))",
   lg: "calc(14px * var(--rf))",
   popup: "calc(16px * var(--rf))",
+  /** A row inside a popup: the popup's corner minus its 6px padding, so the
+   *  lit row's corner runs concentric with the popup's. */
+  popupRow: "calc(10px * var(--rf))",
   xl: "calc(18px * var(--rf))",
   xxl: "calc(22px * var(--rf))",
   pill: "calc(infinity * 1px)",
@@ -417,10 +421,11 @@ export const geometry = stylex.defineConsts({
   radioDot: "6px",
   /** A floating list: never narrower than a short label plus its glyph, and
    *  never taller than the room the positioner reports. */
-  popupMinWidth: "200px",
-  /** The one wider step, for rows with a second line or a submenu. */
-  popupMinWidthWide: "240px",
+  popupMinWidth: "220px",
   popupMaxHeight: "min(60dvh, 420px, var(--available-height))",
+  /** On a phone a row is a 44px finger target, so a menu gets most of the
+   *  screen before it scrolls. */
+  popupMaxHeightPhone: "min(80dvh, var(--available-height))",
   /** A menu with a docked footer gets more room, since the footer does not
    *  scroll with the list. */
   popupMaxHeightFooter: "min(80dvh, 560px, var(--available-height))",

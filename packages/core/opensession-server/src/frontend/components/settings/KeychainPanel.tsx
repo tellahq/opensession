@@ -227,10 +227,7 @@ export function KeychainPanel() {
                   : "Share with everyone"}
               </Menu.Item>
               <Menu.Separator />
-              <Menu.Item
-                className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
-                onClick={() => remove(c)}
-              >
+              <Menu.Item tone="danger" onClick={() => remove(c)}>
                 <IconTrash size={20} />
                 Delete
               </Menu.Item>

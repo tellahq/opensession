@@ -900,7 +900,7 @@ export function SessionTabs({
                     </ContextMenu.Item>
                     {onDelete && (
                       <ContextMenu.Item
-                        className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+                        tone="danger"
                         onClick={() => setDeleteTarget(session)}
                       >
                         <IconTrash size={20} />

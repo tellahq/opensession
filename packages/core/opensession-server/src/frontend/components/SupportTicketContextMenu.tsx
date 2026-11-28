@@ -188,7 +188,7 @@ function TicketMenuBody({
           )}
           {SUB_ARROW}
         </ContextMenu.SubmenuTrigger>
-        <Menu.Popup className="max-h-[min(420px,70vh)]  max-w-[280px]">
+        <Menu.Popup className="max-h-[min(420px,70vh)] max-w-[280px]">
           <PlainLabelItems
             labels={labels}
             labelTypes={labelTypes}
@@ -209,7 +209,7 @@ function TicketMenuBody({
         </ContextMenu.Item>
       )}
       <ContextMenu.Item
-        className="text-red data-[highlighted]:bg-red-soft"
+        tone="danger"
         onClick={() => {
           if (
             window.confirm(

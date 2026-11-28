@@ -179,7 +179,7 @@ export function MyAccountsPanel() {
                           </Menu.Item>
                           <Menu.Item
                             onClick={() => disconnect(s.name)}
-                            className="text-red data-[highlighted]:bg-red-soft"
+                            tone="danger"
                           >
                             <IconTrash size={20} />
                             Disconnect

@@ -359,11 +359,7 @@ function MergeControl({
               <Menu.Item
                 key={choice}
                 onClick={() => merge.onChoose(choice)}
-                className={
-                  choice === "force"
-                    ? "text-red data-[highlighted]:bg-red-soft"
-                    : undefined
-                }
+                tone={choice === "force" ? "danger" : undefined}
               >
                 {MERGE_CHOICE_ICON[choice]}
                 <span className="min-w-0 flex-1 truncate">

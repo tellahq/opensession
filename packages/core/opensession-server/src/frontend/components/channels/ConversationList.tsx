@@ -331,10 +331,7 @@ function Group({
           {section && (
             <>
               <ContextMenu.Separator />
-              <ContextMenu.Item
-                onClick={() => onDelete(section)}
-                className="text-red data-[highlighted]:bg-red-soft"
-              >
+              <ContextMenu.Item onClick={() => onDelete(section)} tone="danger">
                 <IconTrash size={20} className="text-red" />
                 <span className="grow">Delete section</span>
               </ContextMenu.Item>

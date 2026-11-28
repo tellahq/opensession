@@ -220,11 +220,7 @@ export function PrRow({
             </span>
           </ContextMenu.Item>
           <ContextMenu.Separator />
-          <ContextMenu.Item
-            className="text-red data-[highlighted]:bg-red-soft"
-            disabled={closing}
-            onClick={onClose}
-          >
+          <ContextMenu.Item tone="danger" disabled={closing} onClick={onClose}>
             <IconX size={20} />
             <span className="grow">
               {closing ? "Closing…" : "Close pull request…"}

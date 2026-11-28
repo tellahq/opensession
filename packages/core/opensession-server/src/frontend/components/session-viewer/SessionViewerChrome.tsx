@@ -816,7 +816,7 @@ export function SessionViewerChrome({
               // Red at rest, not only under the cursor. This is the one row in
               // the menu that cannot be undone, and a row that looks ordinary
               // until you are already on it announces that too late.
-              className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+              tone="danger"
               onClick={() => setShowDeleteConfirm(true)}
               title="Delete session"
             >
@@ -834,7 +834,7 @@ export function SessionViewerChrome({
               )}
               {onDeleteWorkspace && (
                 <Menu.Item
-                  className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+                  tone="danger"
                   onClick={() =>
                     confirm({
                       title: `Delete workspace "${workspaceName || session.title}"?`,

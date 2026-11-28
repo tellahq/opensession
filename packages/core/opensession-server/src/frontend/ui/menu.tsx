@@ -225,14 +225,19 @@ function ContextPopup({
 
 function Item({
   className,
+  tone,
   ...props
 }: Omit<React.ComponentProps<typeof BaseMenu.Item>, "className"> & {
   className?: string;
+  /** `danger` for a destructive row (Delete, Remove, Archive): red ink and
+   *  a red wash when lit. Leave the row's glyph uncoloured so it takes the
+   *  red too. */
+  tone?: "danger";
 }) {
   return (
     <BaseMenu.Item
       {...props}
-      {...sx([popup.item, popup.touchRow], className)}
+      {...sx([popup.item, tone === "danger" && popup.itemDanger], className)}
     />
   );
 }
@@ -246,7 +251,7 @@ function SubmenuTrigger({
   return (
     <BaseMenu.SubmenuTrigger
       {...props}
-      {...sx([popup.item, popup.itemOpen, popup.touchRow], className)}
+      {...sx([popup.item, popup.itemOpen], className)}
     />
   );
 }
@@ -257,12 +262,7 @@ function RadioItem({
 }: Omit<React.ComponentProps<typeof BaseMenu.RadioItem>, "className"> & {
   className?: string;
 }) {
-  return (
-    <BaseMenu.RadioItem
-      {...props}
-      {...sx([popup.item, popup.touchRow], className)}
-    />
-  );
+  return <BaseMenu.RadioItem {...props} {...sx(popup.item, className)} />;
 }
 
 function CheckboxItem({
@@ -271,12 +271,7 @@ function CheckboxItem({
 }: Omit<React.ComponentProps<typeof BaseMenu.CheckboxItem>, "className"> & {
   className?: string;
 }) {
-  return (
-    <BaseMenu.CheckboxItem
-      {...props}
-      {...sx([popup.item, popup.touchRow], className)}
-    />
-  );
+  return <BaseMenu.CheckboxItem {...props} {...sx(popup.item, className)} />;
 }
 
 /**

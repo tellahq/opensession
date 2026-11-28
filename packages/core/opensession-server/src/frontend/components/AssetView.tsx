@@ -41,7 +41,7 @@ import { absoluteLink, copyToClipboard } from "../lib/share-link";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
-import { Menu } from "../ui/menu";
+import { Menu, MENU_ICON } from "../ui/menu";
 import { ResponsiveDialog } from "../ui/sheet";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
@@ -314,14 +314,14 @@ function AssetMenu({
                 files an agent wrote straight to disk, which send no event. */}
             {refresh && (
               <Menu.Item onClick={refresh}>
-                <IconRefresh size={20} className="text-faint" />
+                <IconRefresh size={20} className={MENU_ICON} />
                 Refresh files
               </Menu.Item>
             )}
             <Menu.Separator />
           </>
         )}
-        <Menu.Item onClick={onDelete} className="text-red">
+        <Menu.Item onClick={onDelete} tone="danger">
           <IconTrash size={20} />
           Delete
         </Menu.Item>

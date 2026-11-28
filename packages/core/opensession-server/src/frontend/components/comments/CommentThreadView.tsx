@@ -15,7 +15,7 @@ import { usePeople } from "../../lib/people";
 import type { CommentThread, ThreadComment } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
-import { Menu } from "../../ui/menu";
+import { Menu, MENU_ICON } from "../../ui/menu";
 import { TextShimmer } from "../../ui/text-shimmer";
 import { toast } from "../../ui/toast";
 import {
@@ -174,7 +174,7 @@ function CommentItem({
                 </Menu.Item>
               )}
               {mine && <Menu.Separator />}
-              <Menu.Item onClick={() => void remove()} className="text-red">
+              <Menu.Item onClick={() => void remove()} tone="danger">
                 <IconTrash size={20} />
                 Delete
               </Menu.Item>
@@ -397,7 +397,7 @@ export function CommentThreadView({
             Ask {AGENT_NAME}
           </Menu.Item>
           <Menu.Item onClick={copyLink}>
-            <IconLink size={20} className="text-faint" />
+            <IconLink size={20} className={MENU_ICON} />
             Copy link
           </Menu.Item>
           {(people.length > 0 || thread.assignee) && (
@@ -435,10 +435,7 @@ export function CommentThreadView({
                 <IconPencil size={20} className="text-faint" />
                 Edit
               </Menu.Item>
-              <Menu.Item
-                onClick={() => void deleteThread()}
-                className="text-red"
-              >
+              <Menu.Item onClick={() => void deleteThread()} tone="danger">
                 <IconTrash size={20} />
                 Delete thread
               </Menu.Item>
