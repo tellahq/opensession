@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "../../ui/cn";
 import {
   slackBlocks,
   type SlackBlock,
@@ -92,9 +93,21 @@ function Block({ block }: { block: SlackBlock }) {
  * bold, italic, strikethrough and inline code, links, @ and # tags and
  * custom emoji (lib/slack-markup.ts parses it).
  */
-export function SlackText({ text }: { text: string }) {
+export function SlackText({
+  text,
+  className,
+}: {
+  text: string;
+  /** Type size and ink, for text smaller than a message's. */
+  className?: string;
+}) {
   return (
-    <div className="select-text whitespace-pre-wrap break-words text-body leading-snug text-fg">
+    <div
+      className={cn(
+        "select-text whitespace-pre-wrap break-words text-body leading-snug text-fg",
+        className,
+      )}
+    >
       {slackBlocks(text).map((block, index) => (
         <Block key={index} block={block} />
       ))}
