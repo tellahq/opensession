@@ -34,10 +34,11 @@ export const WS_SUMMARY_SURFACE =
  * The popup body. Fixed width, so the rows truncate rather than reflow and a
  * long branch name cannot make the card wider than the header it hangs from.
  *
- * It caps its own height and scrolls, because the list is open-ended at the
- * bottom: a session with a dozen assets would otherwise grow the card past
- * the window. Everything above the assets is short and never scrolls in
- * practice.
+ * It grows to the room the column leaves under the header (the positioner's
+ * `--available-height`, already inside the 12px collision padding) and only
+ * then scrolls. A fixed 640px cap hid the Browser tile and the last assets
+ * behind a scroll with no visible scrollbar while half the column stood empty
+ * below the card.
  *
  * This is broader and taller than the compact menus that use `rounded-popup`,
  * so its corner takes one small step up. The inner PR band inherits that step
@@ -49,7 +50,7 @@ export const WS_SUMMARY_SURFACE =
 export const WS_SUMMARY_CARD =
   // Narrower than 300px only when the conversation column is: the card stays
   // inside it (WorkspaceSummary's collision boundary) and its rows truncate.
-  "flex max-h-[min(72vh,640px)] w-[300px] max-w-[var(--available-width,300px)] flex-col overflow-y-auto py-2 " +
+  "flex max-h-[var(--available-height,min(72vh,640px))] w-[300px] max-w-[var(--available-width,300px)] flex-col overflow-y-auto py-2 " +
   WS_SUMMARY_SURFACE;
 
 /** Wide Review keeps its scroller full width so the native scrollbar stays at
