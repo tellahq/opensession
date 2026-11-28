@@ -348,7 +348,7 @@ export function AppleMobileIntegration({ teamNames }: { teamNames: string[] }) {
             <div className="text-item-title font-semibold text-fg">
               Apple mobile
             </div>
-            <StateChip tone={tone} label={label} />
+            {tone !== "off" && <StateChip tone={tone} label={label} />}
           </div>
           <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
             iOS builds and TestFlight releases.

@@ -54,7 +54,9 @@ describe("GitHub integration status", () => {
         onSaved={() => {}}
       />,
     );
-    expect(markup).toContain("Automation off");
+    // Off reads from the switch and the Set up button, not a chip.
+    expect(markup).not.toContain("Automation off");
+    expect(markup).toContain('aria-label="Enable GitHub automation"');
     expect(markup).toContain("Reviews, mentions and labels on pull requests.");
     expect(markup).toContain(
       "GitHub App setup controls repository access. This switch only controls PR automation",

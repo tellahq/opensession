@@ -84,10 +84,10 @@ type MemoryCategory = {
 const MEMORY_CATEGORIES: MemoryCategory[] = [
   {
     kind: "team",
-    title: "Workspace",
-    pageTitle: "Workspace memories",
-    description: "Shared across the workspace and with public Slack memory.",
-    targetLabel: "Workspace",
+    title: "Organization",
+    pageTitle: "Organization memories",
+    description: "Shared with everyone, and in public Slack channels.",
+    targetLabel: "Organization",
     icon: IconGlobe,
     tone: "indigo",
   },
@@ -102,11 +102,10 @@ const MEMORY_CATEGORIES: MemoryCategory[] = [
   },
   {
     kind: "user",
-    title: "Team",
-    pageTitle: "Team memories",
-    description:
-      "Follows the teammate prompting, including their Slack DM memory.",
-    targetLabel: "Teammate",
+    title: "People",
+    pageTitle: "Personal memories",
+    description: "Each person's own, including their Slack DMs.",
+    targetLabel: "Person",
     icon: IconPeople,
     tone: "green",
   },
@@ -712,8 +711,8 @@ function AddMemoryDialog({
     <Modal.Root open={open} onOpenChange={onOpenChange}>
       <Modal.Content>
         <Modal.Header
-          title={`Add ${category.title.toLowerCase()} memory`}
-          description="Save a durable, self-contained fact for this scope."
+          title="Add memory"
+          description="One self-contained fact."
         />
         {scopes.length > 1 && (
           <Field label={category.targetLabel}>
@@ -1162,8 +1161,7 @@ function CategoryPage({
       )}
       {!canAdd ? (
         <EmptyState placement="card">
-          No {category.title.toLowerCase()} scopes exist yet. They appear here
-          after that scope first stores a memory.
+          Nothing here yet. It shows up once a memory is saved.
         </EmptyState>
       ) : error ? (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
@@ -1283,7 +1281,7 @@ export function MemoryPanel() {
                 key={category.kind}
                 rows={1}
                 icon={40}
-                label={`Loading ${category.title.toLowerCase()} memory`}
+                label={`Loading ${category.pageTitle}`}
               />
             ))}
           </div>
