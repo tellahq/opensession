@@ -352,7 +352,7 @@ function ConnectionStatusTile() {
     <Tooltip label={label} side="right">
       <span
         role="status"
-        className="grid size-10 shrink-0 place-items-center text-dim animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none"
+        className="grid size-10 shrink-0 place-items-center text-dim animate-toast-in motion-reduce:animate-none"
       >
         <Spinner size="lg" />
         <span className="sr-only">{label}</span>
