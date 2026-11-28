@@ -86,11 +86,11 @@ export function OpenAIKeySection() {
 
   return (
     <>
-      <SettingsGroupLabel>OpenAI</SettingsGroupLabel>
+      <SettingsGroupLabel>Voice and Autocomplete</SettingsGroupLabel>
       <SettingCard>
         {status?.configured ? (
           <SettingRow
-            title="API key"
+            title="OpenAI key"
             desc={status.keyMasked}
             control={
               <Button size="sm" disabled={busy} onClick={() => putKey("")}>
@@ -100,7 +100,7 @@ export function OpenAIKeySection() {
           />
         ) : (
           <SettingRow
-            title="API key"
+            title="OpenAI key"
             control={
               <div className="flex items-center gap-2">
                 <Input
@@ -147,9 +147,7 @@ export function OpenAIKeySection() {
           }
         />
       </SettingCard>
-      <SettingsHint>
-        {error || "Used for Desk voice and Autocomplete."}
-      </SettingsHint>
+      {error && <SettingsHint>{error}</SettingsHint>}
     </>
   );
 }

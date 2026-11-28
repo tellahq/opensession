@@ -216,11 +216,7 @@ export function ReposSection({
         )}
       </SettingCard>
       <SettingsHint className={compact ? "text-fg/55" : undefined}>
-        Remote repositories are cloned onto the server. Local folders stay where
-        they are. Code sessions use isolated worktrees by default. New repos are
-        usable right away with no restart. Commit <code>.agents/</code> scripts
-        to provision those worktrees and boot previews. See
-        docs/repo-lifecycle.md.
+        Commit <code>.agents/</code> scripts to set up worktrees and previews.
       </SettingsHint>
     </>
   );

@@ -93,7 +93,7 @@ turning it on for anything else.
 
 A feed project is defined as data, not code: which connected MCP server backs
 it, which tool lists its items, and how that tool's fields map onto
-title/preview/timestamp. Add one from Connections → Projects. Any MCP server
+title/preview/timestamp. Add one from Settings → Connections → Feed projects. Any MCP server
 with a list-shaped tool can become a band.
 
 Config-created feeds default their sessions to the backing MCP server and can

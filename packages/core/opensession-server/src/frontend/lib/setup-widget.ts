@@ -58,7 +58,7 @@ export function setupWidgetItems(
       id: "github",
       label: "Connect GitHub",
       complete: githubAuthState(status.github).tone === "on",
-      target: "setup",
+      target: "connections",
     },
     {
       id: "models",
@@ -83,7 +83,7 @@ export function setupWidgetItems(
       label: "Connect tools",
       detail: "Slack, Plain, Figma, Linear and more",
       complete: connectedTool,
-      target: "integrations",
+      target: "connections",
     },
     {
       id: "members",
