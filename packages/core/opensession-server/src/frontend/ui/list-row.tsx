@@ -61,7 +61,8 @@ const styles = stylex.create({
 /** The row's look, for a row that has to be a link rather than a button. */
 export function listRowClass(variant: "plain" | "card" = "plain") {
   return (
-    stylex.props(styles.row, styles[variant], focusStyles.ring).className ?? ""
+    stylex.props(styles.row, styles[variant], focusStyles.ringInset)
+      .className ?? ""
   );
 }
 
@@ -74,7 +75,7 @@ export function ListRow({
   return (
     <button
       type={type}
-      {...sx([styles.row, styles[variant], focusStyles.ring], className)}
+      {...sx([styles.row, styles[variant], focusStyles.ringInset], className)}
       {...props}
     />
   );

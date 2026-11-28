@@ -276,6 +276,8 @@ const styles = stylex.create({
     color: color.faint,
   },
   sheetRow: {
+    outline: { default: null, ":focus-visible": focus.ring },
+    outlineOffset: { default: null, ":focus-visible": focus.insetOffset },
     position: "relative",
     display: "flex",
     width: "100%",

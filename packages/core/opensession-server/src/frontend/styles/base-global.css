@@ -257,6 +257,34 @@ button {
   padding: 0;
 }
 
+/* The app's keyboard focus ring as the default, so a control that never
+   sets one shows 2px of accent ink instead of the browser's black outline.
+   :where() keeps it at one class of weight: `focus-ring-inset`, `outline-none`
+   or a primitive's own StyleX focus style still wins. Fields are left out;
+   they show focus on their border. */
+:where(
+  button,
+  a[href],
+  summary,
+  [role="button"],
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  :where(
+    button,
+    a[href],
+    summary,
+    [role="button"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline-color: Highlight;
+  }
+}
+
 @supports (corner-shape: squircle) {
   /* Turn the squircle treatment on everywhere: every corner radius in this
 	   file is authored as `calc(<value> * var(--rf))` + `corner-shape: var(--cs)`,

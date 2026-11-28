@@ -146,7 +146,7 @@ export function AuditPanel() {
           return (
             <div key={i} className={expanded === i ? "bg-pressed" : ""}>
               <button
-                className="flex w-full min-w-0 cursor-pointer items-baseline gap-2 px-5 py-1.5 text-left text-label hover:bg-hover"
+                className="focus-ring-inset flex w-full min-w-0 cursor-pointer items-baseline gap-2 px-5 py-1.5 text-left text-label hover:bg-hover"
                 onClick={() => setExpanded(expanded === i ? null : i)}
               >
                 <span className="text-faint shrink-0">{time}</span>

@@ -157,7 +157,7 @@ function CategoryCard({
     <SettingCard>
       <button
         type="button"
-        className="focus-ring group flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-left hover:bg-hover phone:items-start"
+        className="focus-ring-inset group flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-left hover:bg-hover phone:items-start"
         onClick={onOpen}
       >
         <CategoryIcon category={category} />
