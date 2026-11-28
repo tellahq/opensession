@@ -93,15 +93,16 @@ export function NotificationBell() {
           <NotificationList filter={filter} onOpen={() => setOpen(false)} />
         </div>
         <div className={INBOX_POPUP_FOOTER}>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!unread}
-            onClick={markAllNotificationsRead}
-          >
-            Mark all as read
-          </Button>
-          <div className="flex items-center gap-1">
+          {unread > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={markAllNotificationsRead}
+            >
+              Mark all as read
+            </Button>
+          )}
+          <div className="ml-auto flex items-center gap-1">
             <Tooltip label="Notification settings" side="top">
               <Button
                 size="sm"

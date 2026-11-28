@@ -1010,7 +1010,7 @@ export function ModelEffortSelect({
       {groupedPrimary
         ? providerGroups.map((g, i) => (
             <React.Fragment key={g.provider}>
-              {i > 0 && <Menu.Separator className="my-1" />}
+              {i > 0 && <Menu.Separator />}
               <Menu.Group>
                 <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
                 {g.options.map((option) =>
@@ -1024,7 +1024,7 @@ export function ModelEffortSelect({
           )}
       {primaryFirst && otherOptions.length > 0 && (
         <>
-          {morePrimaryOptions.length > 0 && <Menu.Separator className="my-1" />}
+          {morePrimaryOptions.length > 0 && <Menu.Separator />}
           <Menu.SubmenuRoot>
             <Menu.SubmenuTrigger className="justify-between gap-3 text-dim">
               <span className="min-w-0 truncate">{LEGACY_GROUP_LABEL}</span>
@@ -1046,9 +1046,7 @@ export function ModelEffortSelect({
       {!primaryFirst &&
         otherGroups.map((g, i) => (
           <React.Fragment key={g.engine}>
-            {(i > 0 || morePrimaryOptions.length > 0) && (
-              <Menu.Separator className="my-1" />
-            )}
+            {(i > 0 || morePrimaryOptions.length > 0) && <Menu.Separator />}
             <Menu.Group>
               {otherGroups.length > 1 && (
                 <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
@@ -1148,7 +1146,7 @@ export function ModelEffortSelect({
       })}
       {onAutoFallbackChange && (
         <>
-          <Menu.Separator className="my-1" />
+          <Menu.Separator />
           <Menu.CheckboxItem
             checked={autoFallback}
             onCheckedChange={onAutoFallbackChange}
@@ -1165,7 +1163,7 @@ export function ModelEffortSelect({
           </Menu.CheckboxItem>
         </>
       )}
-      <Menu.Separator className="my-1" />
+      <Menu.Separator />
       <Menu.Item
         className="justify-between gap-3 phone:min-h-11"
         onClick={() => navigation.openSettings("providers")}
@@ -1213,7 +1211,7 @@ export function ModelEffortSelect({
       {defaultsItems}
       {showUsage && (
         <>
-          <Menu.Separator className="my-1" />
+          <Menu.Separator />
           {inPanel ? (
             <Menu.Group>
               <Menu.GroupLabel>Conversation usage</Menu.GroupLabel>
@@ -1455,7 +1453,7 @@ export function ModelEffortSelect({
             </Reorder.Item>
           ))}
         </Reorder.Group>
-        {topOptions.length > 0 && <Menu.Separator className="my-1" />}
+        {topOptions.length > 0 && <Menu.Separator />}
         {hasEffort &&
           (guidanceAside ? (
             <Menu.Item

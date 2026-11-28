@@ -118,7 +118,7 @@ export function CodeStorageConfiguration({
         {error ? (
           <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
         ) : (
-          <LoadingState>Checking code.storage</LoadingState>
+          <LoadingState>Checking code.storage…</LoadingState>
         )}
       </SettingsSection>
     );

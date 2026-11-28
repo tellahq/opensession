@@ -99,7 +99,7 @@ export function PlainRouterConfiguration() {
         {loadError ? (
           <InlineAlert>{loadError}</InlineAlert>
         ) : (
-          <LoadingState>Loading triage router</LoadingState>
+          <LoadingState>Loading triage router…</LoadingState>
         )}
       </SettingsSection>
     );

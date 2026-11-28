@@ -143,7 +143,7 @@ export function ReportTasksDialog({
               `${picked.size} of ${tasks.length} selected`
             )}
           </span>
-          <Button variant="soft" onClick={onClose} disabled={starting}>
+          <Button variant="ghost" onClick={onClose} disabled={starting}>
             Cancel
           </Button>
           <Button
