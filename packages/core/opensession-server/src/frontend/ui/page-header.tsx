@@ -21,11 +21,13 @@ const styles = stylex.create({
     flexDirection: { default: null, [media.phone]: "column" },
     gap: { default: space.s16, [media.phone]: space.s10 },
   },
+  // One page title everywhere: the same 24px, weight and tracking as a
+  // Settings page's (ui/settings.tsx `pageTitle`).
   title: {
     margin: space.s0,
-    fontSize: text.sectionTitle,
+    fontSize: text.pageTitle,
     fontWeight: weight.title,
-    letterSpacing: tracking.tight,
+    letterSpacing: tracking.title,
     color: color.fg,
   },
   description: {

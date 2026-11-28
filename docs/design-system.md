@@ -153,6 +153,8 @@ property, like the side panel plate) keep working unchanged.
    - A small icon button is 26px (Button `size="sm"`), 44px on a phone.
    - On a phone `Modal.Content` is a bottom sheet. A confirmation
      (`role="alertdialog"`, `ui/confirm.tsx`) stays centered.
+   - One page title: `PageTitle` and a Settings page title share
+     `text.pageTitle` and `tracking.title`.
 
 ### Open decisions
 
