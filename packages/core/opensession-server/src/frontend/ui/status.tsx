@@ -61,6 +61,7 @@ const styles = stylex.create({
     animationTimingFunction: "ease-in-out",
     animationIterationCount: "infinite",
   },
+  large: { width: geometry.dotLarge, height: geometry.dotLarge },
   standalone: { width: geometry.dot, height: geometry.dot },
   inline: { width: geometry.dotInline, height: geometry.dotInline },
   pill: {
@@ -137,8 +138,9 @@ export function PulseDot({
   size = 8,
   className,
 }: {
-  /** 8px standalone; 7px when it sits inside text or the Running pill. */
-  size?: 7 | 8;
+  /** 9px on the chat's busy row; 8px standalone; 7px when it sits inside
+   * text or the Running pill. */
+  size?: 7 | 8 | 9;
   className?: string;
 }) {
   return (
@@ -146,7 +148,14 @@ export function PulseDot({
       aria-hidden
       data-pulse=""
       {...sx(
-        [styles.dot, size === 8 ? styles.standalone : styles.inline],
+        [
+          styles.dot,
+          size === 9
+            ? styles.large
+            : size === 8
+              ? styles.standalone
+              : styles.inline,
+        ],
         className,
       )}
     />
