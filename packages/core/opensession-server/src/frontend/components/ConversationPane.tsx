@@ -1,4 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
+// The transcript's floating pill: the same chrome over live content.
+import { floatingPill } from "../ui/floating-pill";
+import { Spinner } from "../ui/spinner";
+import { sx } from "../ui/sx";
+import { color } from "../ui/tokens.stylex";
 import type { PlainThread, UnifiedSession } from "../lib/types";
 import { fetchPlainThreadById, startPlainTriageApi } from "../lib/api";
 import { useIsPhone } from "../hooks/useIsPhone";
@@ -7,17 +13,6 @@ import { Tooltip } from "../ui/tooltip";
 import { mineStatus } from "../lib/sidebar-lanes";
 import { MINE_STATUS_META } from "../lib/sidebar-types";
 import { SUPPORT_COLUMN_BAR, SUPPORT_TOP_RAIL } from "../lib/support-classes";
-// The transcript's floating pills. This is the same job — chrome that hangs
-// over live content the reader is scrolling — so it takes the same shape
-// rather than a second one invented here, in its opaque form: a support
-// message runs the full width of the column, so glass would show the words
-// through the pill.
-import {
-  FLOATING_PILL,
-  FLOATING_PILL_BUTTON,
-  FLOATING_PILL_LOADING,
-  TRANSCRIPT_PILL_SPINNER,
-} from "../lib/session-viewer-classes";
 import { PlainStatusBadge } from "./PlainStatusBadge";
 import {
   PlainEntryRow,
@@ -75,6 +70,8 @@ interface Props {
  * a whole row to wrap into.
  */
 const ACTIONS_IN_BAR_MIN = 800;
+
+const styles = stylex.create({ dim: { color: color.dim } });
 
 /**
  * The support-ticket Conversation surface: the full thread straight from Plain
@@ -369,7 +366,10 @@ export function ConversationPane({
               >
                 <button
                   type="button"
-                  className={cn(FLOATING_PILL_BUTTON, "pointer-events-auto")}
+                  {...sx(
+                    [floatingPill.pill, floatingPill.pressable],
+                    "group pointer-events-auto",
+                  )}
                   onClick={() => onOpenSession(session.id)}
                 >
                   <span
@@ -384,15 +384,18 @@ export function ConversationPane({
                 </button>
               </Tooltip>
             ) : triaging ? (
-              <div className={FLOATING_PILL_LOADING}>
-                <span className={TRANSCRIPT_PILL_SPINNER} aria-hidden />
+              <div {...stylex.props(floatingPill.pill, floatingPill.loading)}>
+                <Spinner {...stylex.props(styles.dim)} />
                 <span>Starting triage…</span>
               </div>
             ) : (
               <Tooltip label="Investigates, posts an internal note, and can open a PR for review.">
                 <button
                   type="button"
-                  className={cn(FLOATING_PILL_BUTTON, "pointer-events-auto")}
+                  {...sx(
+                    [floatingPill.pill, floatingPill.pressable],
+                    "group pointer-events-auto",
+                  )}
                   onClick={handleTriage}
                 >
                   <IconSparkle size={20} className="text-dim" aria-hidden />
@@ -402,8 +405,8 @@ export function ConversationPane({
             )}
             {triageError && (
               <div
-                className={cn(
-                  FLOATING_PILL,
+                {...sx(
+                  floatingPill.pill,
                   "pointer-events-auto min-w-0 font-normal text-red",
                 )}
                 role="alert"

@@ -31,6 +31,8 @@ export const color = stylex.defineConsts({
   popupRing: "var(--popup-ring)",
   // Interaction washes: translucent ink, so one value reads on any surface.
   hover: "var(--hover)",
+  /** The person's own message bubble (and the pill that quotes it). */
+  bubbleUser: "var(--bubble-user)",
   pressed: "var(--hover-strong)",
   selected: "var(--selected)",
   /** Opaque track surface: switches, meters, neutral badges. */
@@ -555,6 +557,8 @@ export const geometry = stylex.defineConsts({
   sessionColumn: "var(--session-col)",
   /** The reading column plus the 20px gutters a row inside it pads by. */
   sessionColumnPadded: "calc(var(--session-col) + 40px)",
+  /** The pinned prompt pill: one line, at most 480px or 70% of the column. */
+  stickyPromptMaxWidth: "min(480px, 70%)",
   /** Below the phone workspace page's taller bar: 52px plus the notch. */
   infoBarClearance: "calc(env(safe-area-inset-top, 0px) + 52px)",
   /** The live status row under a running turn: 5px above and below. */

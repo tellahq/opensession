@@ -514,93 +514,10 @@ export const SESSION_BANNER =
 
 /* ── Floating transcript pills ──────────────────────────────────────────────
  *
- * "Load all" at the top of the transcript, "Scroll to bottom" at its foot, the
- * support thread's own agent rail, and the loading state each of them swaps
- * to. They float over live content, so they are a floating surface rather than
- * a panel, and they stay small: this is chrome the eye should pass over, not a
- * primary action. Glass over a transcript, an opaque lid over prose that runs
- * the full column — see PILL_LID for which is which and why.
- *
- * The padding is asymmetric on purpose. Every one of these carries a leading
- * icon, and an icon brings its own whitespace to the edge, so matching the
- * label's padding on that side reads as a gap. Trimming the leading side by
- * 4px puts the two ends back in optical balance, the usual trim for an
- * icon+label button.
+ * The pills themselves ("Load all", "Scroll to the bottom", the support rail,
+ * the pinned prompt) are ui/floating-pill.ts. What stays here is where they
+ * float.
  */
-
-/** Everything but the fill and the gap — the two values these pills disagree
- *  on. Both are composed in rather than overridden on top: two utilities for
- *  one property resolve by Tailwind's output order, not by the order they are
- *  written in. */
-const PILL_CHROME =
-  "inline-flex min-h-8 items-center rounded-capsule pr-3.5 pl-2.5 " +
-  "text-label font-semibold text-fg " +
-  "[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm";
-
-const PILL_BASE = `${PILL_CHROME} bg-popup-glass [backdrop-filter:var(--popup-blur)]`;
-
-/**
- * The same pill, opaque — a lid rather than glass.
- *
- * Glass works over a transcript because a turn is a narrow column with margins
- * either side, so the pill mostly hangs over the page rather than over words.
- * Where the text under it runs the full width of the reading column — the
- * support thread, whose customer messages take no surface at all — the words
- * read straight through it and the pill looks broken. A control that floats on
- * content is a lid: the surface reaches its colour, it does not pass through
- * its alpha.
- *
- * The fill is part of the base rather than an override on top of it, for the
- * same reason the gap is: two `bg-*` utilities on one element resolve by
- * Tailwind's output order, and `bg-popup` is emitted BEFORE `bg-popup-glass`,
- * so writing it after would silently lose.
- */
-const PILL_LID = `${PILL_CHROME} bg-popup`;
-
-export const TRANSCRIPT_PILL = `${PILL_BASE} gap-1.5`;
-export const FLOATING_PILL = `${PILL_LID} gap-1.5`;
-
-/**
- * The button form. The hover wash paints on a pseudo-element so it layers over
- * the glass instead of replacing it — which means the pseudo needs the pill's
- * corner treatment too: base.css grants `corner-shape: squircle` by matching
- * `rounded-*` on the ELEMENT, and a pseudo-element matches no selector, so
- * `rounded-[inherit]` alone left a round wash sitting inside a squircle pill
- * with a pale sliver showing at each corner. `corner-shape: inherit` follows
- * whatever the pill resolved to, including the PWA's round-cornered phone case.
- *
- * `after` is the hit target, held a few pixels out past the visible edge so a
- * small pill is still easy to hit; it must not paint anything, or it would
- * square off the corners it extends past.
- */
-const PILL_PRESSABLE =
-  "group relative cursor-pointer transition-[scale] " +
-  "before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +
-  "before:[corner-shape:inherit] before:bg-transparent before:transition-colors before:content-[''] " +
-  "after:absolute after:content-[''] hover:before:bg-hover " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-press";
-
-export const TRANSCRIPT_PILL_BUTTON = `${TRANSCRIPT_PILL} ${PILL_PRESSABLE} after:-inset-1`;
-export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE} after:-inset-1`;
-
-/**
- * The prompt a long turn answers, pinned over the top of the transcript once
- * its bubble scrolls away (StickyActivePrompt). It is that bubble in short:
- * the same accent wash, right-aligned on the reading column, one line. The
- * wash is opaque, so prose scrolling under it never reads through. No ring,
- * like the bubble: the wash and a soft shadow lift it off the page. Regular
- * weight, since it quotes the person's words rather than naming an action.
- */
-export const STICKY_PROMPT_PILL =
-  "pointer-events-auto inline-flex min-w-0 max-w-[min(480px,70%)] rounded-capsule [corner-shape:round] " +
-  "bg-bubble-user px-3.5 py-1.5 text-left text-label text-fg smooth-shadow-sm " +
-  `${PILL_PRESSABLE} after:-inset-1`;
-
-/** A compact transcript action whose visible surface is only the glyph. */
-export const TRANSCRIPT_ICON_BUTTON =
-  "inline-flex size-8 items-center justify-center rounded-full bg-popup-glass text-fg " +
-  "[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm " +
-  `${PILL_PRESSABLE} after:-inset-1.5`;
 
 /**
  * Centring for a pill that floats over the transcript.
@@ -620,14 +537,6 @@ export const TRANSCRIPT_ICON_BUTTON =
  */
 export const PILL_CENTRED =
   "translate-x-[calc(-50%+var(--ws-summary-step,0px))]";
-
-/** The loading state's leading spinner, and the wider gap it asks for: an arrow
- *  glyph carries side bearing of its own, a bare 12px ring carries none, so at
- *  the label's own spacing the two sit on top of each other. */
-export const TRANSCRIPT_PILL_LOADING = `${PILL_BASE} gap-2`;
-export const FLOATING_PILL_LOADING = `${PILL_LID} gap-2`;
-export const TRANSCRIPT_PILL_SPINNER =
-  "size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim";
 
 /**
  * Where the top pill ("Load all", and the loading state it swaps to) floats.

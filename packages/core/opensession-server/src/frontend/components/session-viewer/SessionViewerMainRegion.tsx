@@ -1,4 +1,5 @@
 import { FullPageFileDropOverlay } from "../FullPageFileDropOverlay";
+import { floatingPill } from "../../ui/floating-pill";
 import type { TabStripPlacement } from "../../lib/split-tabs";
 import { useSessionVoice } from "../../hooks/useSessionVoice";
 import { useScrollEdge } from "../../hooks/useScrollEdge";
@@ -88,8 +89,6 @@ import {
 import { TURN_SPACER } from "../../lib/app-shell-classes";
 import {
   PILL_CENTRED,
-  TRANSCRIPT_ICON_BUTTON,
-  TRANSCRIPT_PILL_BUTTON,
   TRANSCRIPT_PILL_TOP,
   VIEWER_ACTION_ROW,
   VIEWER_ACTION_ROW_WITH_SCROLL,
@@ -722,7 +721,14 @@ export function SessionViewerMainRegion({
       shortcut={transcriptDownKeys ?? undefined}
     >
       <button
-        className={cn(TRANSCRIPT_ICON_BUTTON, className)}
+        {...sx(
+          [
+            floatingPill.icon,
+            floatingPill.pressable,
+            floatingPill.pressableWide,
+          ],
+          cn("group", className),
+        )}
         type="button"
         aria-label="Scroll to the bottom"
         onClick={() => {
@@ -1219,9 +1225,9 @@ export function SessionViewerMainRegion({
                     <button
                       type="button"
                       onClick={loadAllHistory}
-                      className={cn(
-                        TRANSCRIPT_PILL_BUTTON,
-                        "pointer-events-auto",
+                      {...sx(
+                        [floatingPill.pill, floatingPill.pressable],
+                        "group pointer-events-auto",
                       )}
                     >
                       <IconArrowUp

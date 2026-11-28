@@ -1,8 +1,9 @@
 import { useEffect, useState, type RefObject } from "react";
+import { sx } from "../ui/sx";
 import { AnimatePresence, motion } from "motion/react";
 import type { TranscriptEntry } from "../lib/types";
 import { RAIL_GUTTER_CLASS } from "../lib/message-rail";
-import { STICKY_PROMPT_PILL } from "../lib/session-viewer-classes";
+import { floatingPill } from "../ui/floating-pill";
 import { duration, ease } from "../ui/motion";
 import {
   pickStickyPromptId,
@@ -105,7 +106,10 @@ export function StickyActivePrompt({
               onClick={jumpToPrompt}
               title={text}
               aria-label={`Back to your message: ${text}`}
-              className={STICKY_PROMPT_PILL}
+              {...sx(
+                [floatingPill.prompt, floatingPill.pressable],
+                "pointer-events-auto",
+              )}
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
