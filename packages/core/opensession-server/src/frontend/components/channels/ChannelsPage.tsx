@@ -171,7 +171,7 @@ function MessageList({
               onClick={() => void state.loadOlder()}
               disabled={state.loadingOlder}
             >
-              {state.loadingOlder ? "Loading" : "Load earlier messages"}
+              {state.loadingOlder ? "Loading…" : "Load earlier messages"}
             </Button>
           </div>
         )}

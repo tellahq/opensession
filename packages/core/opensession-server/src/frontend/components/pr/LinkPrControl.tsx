@@ -102,7 +102,7 @@ export function LinkPrControl({
           <div className="flex justify-end gap-2.5">
             <Popover.Close
               render={
-                <Button variant="soft" disabled={busy}>
+                <Button variant="ghost" disabled={busy}>
                   Cancel
                 </Button>
               }

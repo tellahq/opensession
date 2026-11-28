@@ -32,15 +32,16 @@ export function InboxPage() {
       title="Notifications"
       description={unread ? `${unread} unread` : "You're all caught up"}
       actions={
-        <Button
-          size="md"
-          variant="default"
-          disabled={!unread}
-          onClick={markAllNotificationsRead}
-          className="phone:w-full"
-        >
-          Mark all as read
-        </Button>
+        unread ? (
+          <Button
+            size="md"
+            variant="default"
+            onClick={markAllNotificationsRead}
+            className="phone:w-full"
+          >
+            Mark all as read
+          </Button>
+        ) : undefined
       }
       filters={
         <InboxFilterControl

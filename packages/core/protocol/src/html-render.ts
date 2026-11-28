@@ -386,7 +386,7 @@ export const HTML_THEME_DEFAULTS: Record<HtmlAppearance, HtmlTheme> = {
       "--foreground": "#1a1a1a",
       "--muted": "#f0f0f0",
       "--muted-foreground": "#646464",
-      "--faint-foreground": "#949494",
+      "--faint-foreground": "#848484",
       "--card": "#f6f6f6",
       "--card-foreground": "#1a1a1a",
       "--border": "#e2e2e2",

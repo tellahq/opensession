@@ -311,7 +311,7 @@ export function SpinOffMenu({
               Cancel
             </Button>
             <Button
-              className="border-accent bg-accent-soft text-accent hover:border-accent hover:text-accent"
+              className="border-accent bg-accent-soft text-accent-ink hover:border-accent hover:text-accent-ink"
               onClick={start}
               disabled={!canStart}
             >

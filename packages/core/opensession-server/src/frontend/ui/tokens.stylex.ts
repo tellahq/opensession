@@ -85,7 +85,6 @@ export const color = stylex.defineConsts({
   onAccentControl: "var(--on-accent-control, var(--on-accent))",
   panelSurface: "var(--panel-surface)",
   /** A palette: denser glass than a menu, since it sits over a scrim. */
-  paletteGlass: "var(--palette-glass)",
   /** The hairline a shell on a scrim needs: firmer than a menu's. */
   dialogRing: "var(--dialog-ring)",
   /** The dimming under a dialog, and the lighter one under a glass palette

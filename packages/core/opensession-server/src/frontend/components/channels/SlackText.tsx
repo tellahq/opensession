@@ -46,7 +46,7 @@ function Inline({ node }: { node: SlackInline }): ReactNode {
       );
     case "tag":
       return (
-        <span className="rounded-sm bg-accent-soft px-1 font-medium text-accent">
+        <span className="rounded-sm bg-accent-soft px-1 font-medium text-accent-ink">
           {node.label}
         </span>
       );
