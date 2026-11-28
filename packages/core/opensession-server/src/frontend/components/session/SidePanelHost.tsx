@@ -239,7 +239,7 @@ export function SidePanelHost({
                   </button>
                 )}
               </ContextMenu.Trigger>
-              <ContextMenu.Popup className="min-w-[220px]" finalFocus={false}>
+              <ContextMenu.Popup finalFocus={false}>
                 {onMoveToMain && isDockable(tab) && (
                   <ContextMenu.Item onClick={() => onMoveToMain(tab)}>
                     <IconExpand size={20} className={MENU_ICON} />

@@ -205,7 +205,7 @@ function ProgressRow({
                   <IconPlus size={20} className="size-3.5" />
                 </Menu.Trigger>
               </Tooltip>
-              <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+              <Menu.Popup align="end" sideOffset={6}>
                 <CollaboratorMenuItems {...state} />
               </Menu.Popup>
             </Menu.Root>

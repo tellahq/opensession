@@ -302,7 +302,7 @@ function Dock() {
               }
             />
           </Tooltip>
-          <Menu.Popup side="top" align="start" className="min-w-[200px]">
+          <Menu.Popup side="top" align="start">
             {invitable.length === 0 ? (
               <div className="px-2.5 py-1.5 text-meta text-faint">
                 Everyone is already here.

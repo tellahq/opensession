@@ -487,7 +487,7 @@ export function Archived({
           </Button>
         }
       />
-      <Menu.Popup align={align} className="min-w-[200px]">
+      <Menu.Popup align={align}>
         <Menu.RadioGroup
           value={owner}
           onValueChange={(value) => setOwner(String(value))}
@@ -538,7 +538,7 @@ export function Archived({
             </Button>
           }
         />
-        <Menu.Popup align={align} className="min-w-[200px]">
+        <Menu.Popup align={align}>
           <Menu.RadioGroup
             value={repo}
             onValueChange={(value) => setRepo(String(value))}
@@ -581,7 +581,7 @@ export function Archived({
             />
           }
         />
-        <Menu.Popup align={align} className="min-w-[180px]">
+        <Menu.Popup align={align}>
           <Menu.RadioGroup
             value={reason}
             onValueChange={(value) => {

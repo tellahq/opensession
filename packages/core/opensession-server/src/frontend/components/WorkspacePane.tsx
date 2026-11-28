@@ -713,7 +713,7 @@ export function WorkspacePane({
         <Menu.Popup
           align={isPhone ? "end" : "start"}
           sideOffset={6}
-          className="min-w-[240px] max-w-[min(300px,calc(100vw-24px))]"
+          className="min-w-menu-wide max-w-[min(300px,calc(100vw-24px))]"
         >
           {onRenameWorkspace && (
             <Menu.Item onClick={() => setRenameDraft(workspace.name)}>
@@ -748,7 +748,7 @@ export function WorkspacePane({
                 <span className="grow">Archived sessions</span>
                 <IconChevronRight size={20} className="text-faint" />
               </Menu.SubmenuTrigger>
-              <Menu.Popup className="min-w-[240px] max-w-[320px]">
+              <Menu.Popup className="min-w-menu-wide max-w-[320px]">
                 <ArchivedSessionItems
                   sessions={archivedSessions}
                   onSelect={(session) => {
@@ -769,7 +769,7 @@ export function WorkspacePane({
           )}
           {onDeleteWorkspace && (
             <Menu.Item
-              className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+              tone="danger"
               onClick={() =>
                 confirm({
                   title: `Delete workspace "${workspace.name}"?`,

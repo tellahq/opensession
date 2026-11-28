@@ -286,7 +286,7 @@ export function RepoBar({
     <>
       <Menu.Root open={open} onOpenChange={setOpen}>
         {trigger}
-        <Menu.Popup align="start" sideOffset={6} className="min-w-[230px]">
+        <Menu.Popup align="start" sideOffset={6} className="min-w-menu-wide">
           {controlsLoadError && (
             <div
               role="alert"

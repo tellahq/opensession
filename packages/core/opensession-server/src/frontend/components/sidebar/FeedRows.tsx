@@ -431,7 +431,7 @@ export function FeedFilterMenu({
       >
         <IconFilter size={20} />
       </Menu.Trigger>
-      <Menu.Popup align="end" sideOffset={5} className="min-w-[230px]">
+      <Menu.Popup align="end" sideOffset={5} className="min-w-menu-wide">
         {metaSpecs.map((spec) => {
           const options = metaOptions(spec);
           const me = options.find(

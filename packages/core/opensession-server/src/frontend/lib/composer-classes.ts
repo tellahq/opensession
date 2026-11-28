@@ -167,7 +167,7 @@ export const composerMenuPopup =
  *  `min-w-*` on the same element would not compose — the send-later menu is
  *  wider (it lists pending messages), and whichever Tailwind emitted last would
  *  win rather than the one written last. */
-export const composerMenuWidth = "min-w-[172px]";
+export const composerMenuWidth = "min-w-menu";
 /** Default anchoring: the menu hangs off the right edge of its trigger. */
 export const composerMenuAnchorRight = "right-0";
 /** The "+" sits at the LEFT of the toolbar, so its menu grows rightward from

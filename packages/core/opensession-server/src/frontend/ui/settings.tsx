@@ -293,10 +293,10 @@ export function SettingsSection({
 
 /**
  * One setting: its label and description on the left, its control on the
- * right. On a phone, text keeps at least 45% of the row and controls cap at
- * 50%, leaving room for the gap. Compact controls stay beside the text while
- * wider controls truncate or wrap within their side instead of taking a new
- * row.
+ * right. On a phone, text keeps at least 45% of the row and the control takes
+ * what is left: a compact control stays beside the text, and one too wide for
+ * that wraps onto its own line, right-aligned, rather than truncating its
+ * value.
  *
  * Rows are centered, which is right while the text is a title and one line of
  * description. A row that grows past that (an account with usage bars) should
@@ -564,7 +564,7 @@ const styles = stylex.create({
   rowControl: {
     marginInlineStart: "auto",
     flexShrink: 0,
-    maxWidth: { default: null, [media.phone]: "50%" },
+    maxWidth: "100%",
   },
   chip: {
     display: "flex",

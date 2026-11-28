@@ -90,8 +90,6 @@
 	   `popup` on its own where the blur can't run (see base.css). */
   --color-popup: var(--popup-surface);
   --color-popup-glass: var(--popup-glass);
-  /* The same paper, denser, for the command palette — a big box over a dimming
-	   backdrop needs more body than a strip of menu rows (see base.css). */
   /* bg-hover is the interaction *wash* (translucent ink, so it reads the same
 	   strength over any surface) — that's what `hover:bg-hover` wants at all of
 	   its call sites. bg-active stays an opaque surface: it's used as one (switch
@@ -484,6 +482,11 @@
   --container-page-wide: 920px;
   --container-settings: 720px;
   --container-card: 560px;
+  /* A menu's floor (StyleX `geometry.popupMinWidth`), and the one wider step
+	   for a menu whose rows carry a second line or a submenu. `min-w-menu-wide`;
+	   a plain menu needs no class, the primitive already holds 220. */
+  --container-menu: 220px;
+  --container-menu-wide: 240px;
 
   /* Motion. Without these the utility layer runs its own motion system: a
 	   bare `transition-colors` emits Tailwind's stock cubic-bezier(0.4, 0, 0.2, 1),

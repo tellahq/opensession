@@ -1151,7 +1151,7 @@ export function ModelEffortSelect({
             checked={autoFallback}
             onCheckedChange={onAutoFallbackChange}
             closeOnClick={false}
-            className="justify-between gap-3 phone:min-h-11"
+            className="justify-between gap-3"
           >
             <span className="flex min-w-0 flex-col">
               <span>Auto-fallback</span>
@@ -1165,7 +1165,7 @@ export function ModelEffortSelect({
       )}
       <Menu.Separator />
       <Menu.Item
-        className="justify-between gap-3 phone:min-h-11"
+        className="justify-between gap-3"
         onClick={() => navigation.openSettings("providers")}
       >
         <span className="min-w-0 truncate">Manage accounts</span>
@@ -1236,7 +1236,7 @@ export function ModelEffortSelect({
             checked={usageBarOn}
             onCheckedChange={setUsageBarPref}
             closeOnClick
-            className="justify-between gap-3 phone:min-h-11"
+            className="justify-between gap-3"
           >
             <span className="min-w-0 truncate">Show usage bar</span>
             <Menu.Check on={usageBarOn} className="text-dim" />
@@ -1407,7 +1407,6 @@ export function ModelEffortSelect({
             : topGuidanceFooter
               ? POPUP_WIDTH
               : POPUP_WIDTH_CAP,
-          menuRowTrigger && "min-w-[220px]",
         )}
       >
         {/* The best five sit right here; the rest are one hop away. A row
@@ -1598,7 +1597,7 @@ export function ModelEffortSelect({
               <span className="min-w-0 truncate">Options</span>
               <IconChevronRight className="shrink-0 text-dim" size={20} />
             </Menu.SubmenuTrigger>
-            <Menu.Popup className="min-w-[220px] max-w-[min(360px,calc(100vw-1rem))]">
+            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
               {optionsItems(false)}
             </Menu.Popup>
           </Menu.SubmenuRoot>

@@ -506,12 +506,7 @@ function RepoActionsMenu({
           </Menu.CheckboxItem>
           <Menu.Separator />
           <Menu.Item
-            className={cn(
-              "data-[disabled]:cursor-default data-[disabled]:opacity-40",
-              repo.isDefault
-                ? "text-dim"
-                : "text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red",
-            )}
+            tone={repo.isDefault ? undefined : "danger"}
             disabled={!!saving || repo.isDefault}
             onClick={confirmRemove}
           >

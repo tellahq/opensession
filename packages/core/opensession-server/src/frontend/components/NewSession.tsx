@@ -1708,7 +1708,7 @@ export function NewSession({
                 <Menu.Popup
                   align="start"
                   sideOffset={6}
-                  className="min-w-[260px] max-w-[min(360px,calc(100vw-1rem))]"
+                  className="min-w-menu-wide max-w-[min(360px,calc(100vw-1rem))]"
                 >
                   <Menu.Item
                     className="gap-2"

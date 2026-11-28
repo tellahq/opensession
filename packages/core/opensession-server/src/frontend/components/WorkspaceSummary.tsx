@@ -1613,7 +1613,7 @@ export function WorkspaceSummaryBody({
                 </span>
                 <IconChevronDown size={20} className="shrink-0 text-faint" />
               </Menu.Trigger>
-              <Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+              <Menu.Popup align="end" sideOffset={6}>
                 {reviewerMenuItems()}
                 <Menu.Separator />
                 <Menu.Item

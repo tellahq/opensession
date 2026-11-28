@@ -323,10 +323,7 @@ function MemberActions({
             <IconPencil size={20} className={MENU_ICON} />
             Edit member
           </Menu.Item>
-          <Menu.Item
-            className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
-            onClick={() => setConfirmOpen(true)}
-          >
+          <Menu.Item tone="danger" onClick={() => setConfirmOpen(true)}>
             <IconTrash size={20} />
             Remove member
           </Menu.Item>

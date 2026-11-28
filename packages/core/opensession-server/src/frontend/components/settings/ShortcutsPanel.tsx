@@ -341,7 +341,7 @@ export function ShortcutsPanel() {
                     </Menu.Item>
                   )}
                   <Menu.Item
-                    className="text-red data-[highlighted]:bg-red-soft"
+                    tone="danger"
                     onClick={() =>
                       setShortcutBindings(
                         id,

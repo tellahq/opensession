@@ -421,7 +421,7 @@ export function DesignSystemGallery() {
                 <Menu.Item>Duplicate workspace</Menu.Item>
                 <Menu.Item>Copy session link</Menu.Item>
                 <Menu.Separator />
-                <Menu.Item className="text-red">Archive session</Menu.Item>
+                <Menu.Item tone="danger">Archive session</Menu.Item>
               </Menu.Popup>
             </Menu.Root>
 

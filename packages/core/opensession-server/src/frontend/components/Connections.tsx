@@ -7,7 +7,7 @@ import React, {
   useState,
   useRef,
 } from "react";
-import { Menu } from "../ui/menu";
+import { Menu, MENU_ICON } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
@@ -474,7 +474,7 @@ export function Connections() {
                         </Menu.Item>
                         <Menu.Item
                           onClick={() => handleRemove(s.name)}
-                          className="text-red data-[highlighted]:bg-red-soft"
+                          tone="danger"
                         >
                           <IconTrash size={20} />
                           Remove server
@@ -1478,13 +1478,13 @@ export function GithubAccounts({
                         onClick={startConnect}
                         disabled={flowState !== "idle"}
                       >
-                        <IconPlug size={20} className="text-faint" />
+                        <IconPlug size={20} className={MENU_ICON} />
                         Reconnect
                       </Menu.Item>
                     )}
                     <Menu.Item
                       onClick={() => disconnect(account.login)}
-                      className="text-red data-[highlighted]:bg-red-soft"
+                      tone="danger"
                     >
                       <IconTrash size={20} />
                       Disconnect
@@ -1751,12 +1751,12 @@ export function GithubAccounts({
                     onClick={startConnect}
                     disabled={flowState !== "idle"}
                   >
-                    <IconPlug size={20} className="text-faint" />
+                    <IconPlug size={20} className={MENU_ICON} />
                     Reconnect
                   </Menu.Item>
                   <Menu.Item
                     onClick={() => disconnect(own!.github)}
-                    className="text-red data-[highlighted]:bg-red-soft"
+                    tone="danger"
                   >
                     <IconTrash size={20} />
                     Disconnect
@@ -1831,7 +1831,7 @@ export function GithubAccounts({
                         <Menu.Popup align="end" sideOffset={4}>
                           <Menu.Item
                             onClick={() => disconnect(m.github)}
-                            className="text-red data-[highlighted]:bg-red-soft"
+                            tone="danger"
                           >
                             <IconTrash size={20} />
                             Disconnect

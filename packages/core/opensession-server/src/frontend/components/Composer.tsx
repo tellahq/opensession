@@ -2210,7 +2210,7 @@ export function Composer({
                     )}
                   </ContextMenu.Trigger>
                 </Tooltip>
-                <ContextMenu.Popup className="min-w-[230px]">
+                <ContextMenu.Popup className="min-w-menu-wide">
                   <ContextMenu.Item onClick={() => pickBusySend("queue")}>
                     <IconReturn size={20} />
                     <span className="grow">Queue after run finishes</span>

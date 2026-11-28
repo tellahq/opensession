@@ -65,7 +65,7 @@ export function SupportTicketContextMenu({
           e.stopPropagation();
         }}
       />
-      <ContextMenu.Popup className="min-w-[220px]">
+      <ContextMenu.Popup>
         <TicketMenuBody thread={thread} onChange={onChange} />
       </ContextMenu.Popup>
     </ContextMenu.Root>
@@ -111,7 +111,7 @@ function TicketMenuBody({
           <span className="grow">Snooze</span>
           {SUB_ARROW}
         </ContextMenu.SubmenuTrigger>
-        <Menu.Popup className="min-w-[160px]">
+        <Menu.Popup>
           {SNOOZE_OPTIONS.map((o) => (
             <Menu.Item
               key={o.seconds}
@@ -138,7 +138,7 @@ function TicketMenuBody({
           </ContextMenu.Shortcut>
           {SUB_ARROW}
         </ContextMenu.SubmenuTrigger>
-        <Menu.Popup className="min-w-[160px]">
+        <Menu.Popup>
           <PlainPriorityItems
             priority={thread.priority}
             onPick={(priority) => onChange({ kind: "priority", priority })}
@@ -156,7 +156,7 @@ function TicketMenuBody({
           )}
           {SUB_ARROW}
         </ContextMenu.SubmenuTrigger>
-        <Menu.Popup className="min-w-[200px] max-w-[280px]">
+        <Menu.Popup className="max-w-[280px]">
           <PlainAssigneeItems
             assigneeId={thread.assignee?.id}
             users={users}
@@ -188,7 +188,7 @@ function TicketMenuBody({
           )}
           {SUB_ARROW}
         </ContextMenu.SubmenuTrigger>
-        <Menu.Popup className="max-h-[min(420px,70vh)] min-w-[200px] max-w-[280px]">
+        <Menu.Popup className="max-h-[min(420px,70vh)] max-w-[280px]">
           <PlainLabelItems
             labels={labels}
             labelTypes={labelTypes}
@@ -209,7 +209,7 @@ function TicketMenuBody({
         </ContextMenu.Item>
       )}
       <ContextMenu.Item
-        className="text-red data-[highlighted]:bg-red-soft"
+        tone="danger"
         onClick={() => {
           if (
             window.confirm(

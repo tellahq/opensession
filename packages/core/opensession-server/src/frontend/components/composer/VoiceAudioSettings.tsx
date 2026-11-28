@@ -42,8 +42,6 @@ const SHARED_HINT = "Shared by dictation and calls. Applies next time.";
 const triggerClasses =
   "inline-flex size-8 shrink-0 items-center justify-center rounded-full text-dim transition-colors hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg disabled:cursor-default disabled:opacity-50 phone:size-11";
 
-const itemClasses = "phone:min-h-11 data-[disabled]:opacity-50";
-
 function MenuNote({
   tone = "dim",
   children,
@@ -84,7 +82,7 @@ function DeviceRadioGroup({
           key={row.id}
           value={row.id}
           disabled={row.disabled}
-          className={cn(itemClasses, "justify-between gap-3")}
+          className="justify-between gap-3"
         >
           <span className="flex min-w-0 flex-col">
             <span className="truncate">{row.label}</span>
@@ -146,9 +144,7 @@ function VoiceAudioMenuContent({
           <Menu.Separator />
           {compact ? (
             <Menu.SubmenuRoot>
-              <Menu.SubmenuTrigger
-                className={cn(itemClasses, "justify-between gap-3")}
-              >
+              <Menu.SubmenuTrigger className="justify-between gap-3">
                 <span>Output</span>
                 <span className="flex min-w-0 items-center gap-1 text-dim">
                   <span className="truncate">
@@ -180,7 +176,7 @@ function VoiceAudioMenuContent({
         checked={duckingSupported && settings.ducking}
         disabled={!duckingSupported}
         onCheckedChange={(ducking) => update({ ...settings, ducking })}
-        className={cn(itemClasses, "justify-between gap-3")}
+        className="justify-between gap-3"
       >
         {/* Wraps rather than truncates: the row is 280px wide in a
             narrow window and the label is the whole row's meaning. */}
@@ -196,21 +192,12 @@ function VoiceAudioMenuContent({
           <MenuNote tone="warn">
             Couldn't list audio devices. Your saved choices are kept.
           </MenuNote>
-          <Menu.Item
-            closeOnClick={false}
-            className={itemClasses}
-            onClick={refresh}
-          >
+          <Menu.Item closeOnClick={false} onClick={refresh}>
             Try again
           </Menu.Item>
         </>
       ) : (
-        <Menu.Item
-          closeOnClick={false}
-          disabled={loading}
-          className={itemClasses}
-          onClick={refresh}
-        >
+        <Menu.Item closeOnClick={false} disabled={loading} onClick={refresh}>
           {loading ? "Checking devices…" : "Refresh devices"}
         </Menu.Item>
       )}

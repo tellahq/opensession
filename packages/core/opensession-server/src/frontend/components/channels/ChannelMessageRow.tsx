@@ -458,10 +458,7 @@ export function ChannelMessageRow({
                 </Menu.Item>
               )}
               {onDelete && (
-                <Menu.Item
-                  onClick={onDelete}
-                  className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
-                >
+                <Menu.Item onClick={onDelete} tone="danger">
                   <IconTrash size={20} />
                   <span className="grow">Delete message</span>
                 </Menu.Item>
